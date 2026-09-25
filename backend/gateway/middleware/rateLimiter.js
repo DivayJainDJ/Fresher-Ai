@@ -2,7 +2,7 @@ const clients = new Map();
 
 export const rateLimiter = (maxRequests = 30, windowMs = 60_000) => {
     return (req, res, next) => {
-        const key = req.headers["x-user-id"] || req.ip || "anonymous";
+        const key = req.user?.userId || req.headers["x-user-id"] || req.ip || "anonymous";
         const now = Date.now();
 
         if (!clients.has(key)) {
@@ -25,7 +25,9 @@ export const rateLimiter = (maxRequests = 30, windowMs = 60_000) => {
             res.setHeader("Retry-After", retryAfter);
             return res.status(429).json({
                 success: false,
-                message: `Too many requests. Please retry in ${retryAfter}s.`,
+                code: "RATE_LIMITED",
+                retryAfter,
+                message: `You're sending requests a bit too fast. Please retry in ${retryAfter}s.`,
             });
         }
 

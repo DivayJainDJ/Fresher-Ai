@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FiX } from "react-icons/fi";
 import { motion } from "motion/react"
 import { FcGoogle } from "react-icons/fc";
@@ -5,8 +6,34 @@ import { signInWithPopup } from 'firebase/auth';
 import { auth, provider } from '../utils/firebase';
 import { loginWithFirebaseToken } from "../apis/user.api";
 function LoginModel({ onClose ,setUser}) {
+    const [errorMsg, setErrorMsg] = useState("")
+    const [loading, setLoading] = useState(false)
+
+    const describeError = (error) => {
+        // Firebase blocks the SAME browser after repeated sign-in
+        // attempts in a short window — this is Google's own rate
+        // limiting, not our backend, and clears on its own.
+        if (error?.code === "auth/too-many-requests") {
+            return "Too many sign-in attempts from this browser. Please wait a minute and try again."
+        }
+        if (error?.code === "auth/unauthorized-domain") {
+            return "Google sign-in is not allowed on this domain yet. Add this frontend domain to Firebase Authorized Domains."
+        }
+        if (error?.code === "auth/popup-closed-by-user" || error?.code === "auth/cancelled-popup-request") {
+            return "" // user just closed the popup, not a real error
+        }
+        if (error?.response?.status === 429 || error?.friendlyMessage) {
+            return error.friendlyMessage || "Server is a little busy right now. Please try again in a few seconds."
+        }
+        if (!error?.response && error?.code?.startsWith?.("auth/") === false && error?.message?.toLowerCase?.().includes("network")) {
+            return "Couldn't reach the server. It may be waking up — please try again shortly."
+        }
+        return error?.message || "Google sign-in failed. Please try again."
+    }
 
     const handleGoogleAuth = async () => {
+        setErrorMsg("")
+        setLoading(true)
         try {
             provider.setCustomParameters({ prompt: "select_account" })
             const result = await signInWithPopup(auth , provider)
@@ -18,9 +45,10 @@ function LoginModel({ onClose ,setUser}) {
             onClose()
         } catch (error) {
             console.log(error)
-            alert(error?.code === "auth/unauthorized-domain"
-                ? "Google sign-in is not allowed on this domain yet. Add this frontend domain to Firebase Authorized Domains."
-                : error?.message || "Google sign-in failed. Please try again.")
+            const message = describeError(error)
+            if (message) setErrorMsg(message)
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -54,17 +82,23 @@ function LoginModel({ onClose ,setUser}) {
                     <div className='mt-7'>
                         <motion.button
                         onClick={handleGoogleAuth}
-                            whileHover={{ scale: 1.04 }}
-                            whileTap={{ scale: 0.97 }}
-                            className='w-full flex items-center justify-center gap-3 py-3 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md hover:border-white/25 hover:bg-white/[0.14] shadow-inner transition-all'
+                            disabled={loading}
+                            whileHover={{ scale: loading ? 1 : 1.04 }}
+                            whileTap={{ scale: loading ? 1 : 0.97 }}
+                            className='w-full flex items-center justify-center gap-3 py-3 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md hover:border-white/25 hover:bg-white/[0.14] shadow-inner transition-all disabled:opacity-60 disabled:cursor-not-allowed'
                         >
                             <FcGoogle size={18}/>
                             <span className='text-white font-medium text-sm'>
-                                Continue with Google
+                                {loading ? "Signing in..." : "Continue with Google"}
                             </span>
 
 
                         </motion.button>
+                        {errorMsg && (
+                            <p className='mt-3 text-center text-xs text-red-400/90 leading-relaxed'>
+                                {errorMsg}
+                            </p>
+                        )}
                     </div>
                 </div>
 

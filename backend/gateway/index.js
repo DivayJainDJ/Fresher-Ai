@@ -63,7 +63,7 @@ app.get("/", (_req, res) => {
     res.send("Hello from Gateway")
 })
 
-setTimeout(() => {
+const warmServices = () => {
     const services = [
         process.env.AUTH_SERVICE_URL,
         process.env.RESUME_SERVICE_URL,
@@ -77,7 +77,15 @@ setTimeout(() => {
             .then(() => console.log(`Warmed: ${url}`))
             .catch(() => {})
     }
-}, 3000)
+}
+
+// Warm the downstream services on boot, then keep re-warming them
+// every 10 minutes so they don't spin down on Render's free tier
+// as long as the gateway itself is being kept awake (see README —
+// point a free external pinger like cron-job.org/UptimeRobot at
+// this gateway's /health every 10 min to keep the whole chain warm).
+setTimeout(warmServices, 3000)
+setInterval(warmServices, 10 * 60 * 1000)
 
 app.use((req, res, next) => {
     const timeout = req.path.includes("/generate") || req.path.includes("/upload")
@@ -99,10 +107,16 @@ app.use((req, res, next) => {
     next()
 })
 
+// Per-user limit on the AI-heavy routes. This protects the shared
+// free-tier LLM quota from a single user exhausting it for everyone
+// else, and returns a friendly, parseable 429 instead of letting the
+// upstream provider's raw rate-limit error leak to the client.
+const aiRateLimiter = rateLimiter(12, 60_000) // 12 generate calls / minute / user
+
 app.use("/api/auth", proxyWithHeaders(process.env.AUTH_SERVICE_URL, "/api/auth"))
-app.use("/api/resume", isAuth, proxyWithHeaders(process.env.RESUME_SERVICE_URL, "/api/resume"))
-app.use("/api/interview", isAuth, proxyWithHeaders(process.env.INTERVIEW_SERVICE_URL, "/api/interview"))
-app.use("/api/roadmap", isAuth, proxyWithHeaders(process.env.ROADMAP_SERVICE_URL, "/api/roadmap"))
+app.use("/api/resume", isAuth, aiRateLimiter, proxyWithHeaders(process.env.RESUME_SERVICE_URL, "/api/resume"))
+app.use("/api/interview", isAuth, aiRateLimiter, proxyWithHeaders(process.env.INTERVIEW_SERVICE_URL, "/api/interview"))
+app.use("/api/roadmap", isAuth, aiRateLimiter, proxyWithHeaders(process.env.ROADMAP_SERVICE_URL, "/api/roadmap"))
 app.use("/api/billing/verify", proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
 app.use("/api/billing", isAuth, proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
 app.get("/api/me", isAuth, getCurrentUser)
