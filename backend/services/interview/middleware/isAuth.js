@@ -35,9 +35,11 @@ export const chargeCoins = (action) => async (req, res, next) => {
         const userId = req.user?.userId || req.headers["x-user-id"];
         const cost = getCoinCost(action);
         if (!cost) return res.status(400).json({ success: false, message: "Invalid coin action" });
-        const user = await spendCoinsWithLedger({ User, Ledger: CreditLedger, userId, action, eventKey: `spend:${crypto.randomUUID()}` });
+        const requestedKey = action === "code-review" ? req.validatedCodeReview?.idempotencyKey : null;
+        const eventKey = requestedKey ? `spend:code-review:${userId}:${requestedKey}` : `spend:${crypto.randomUUID()}`;
+        const user = await spendCoinsWithLedger({ User, Ledger: CreditLedger, userId, action, eventKey });
         if (!user) return res.status(402).json({ success: false, message: "Not enough interview coins", code: "INSUFFICIENT_COINS" });
-        req.coinCharge = { userId, cost, action, eventKey: user.ledgerEventKey };
+        req.coinCharge = { userId, cost, action, eventKey: user.ledgerEventKey, alreadyProcessed: user.alreadyProcessed === true };
         req.user.interviewCoin = user.interviewCoin;
         const sessionId = req.cookies?.session || req.headers["x-session-id"];
         if (sessionId) await redis.set(`session:${sessionId}`, JSON.stringify({ ...req.user, interviewCoin: user.interviewCoin }), "EX", 60 * 60 * 24 * 7);

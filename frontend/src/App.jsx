@@ -15,6 +15,7 @@ import Roadmap from './pages/Roadmap'
 import Billing from './pages/Billing'
 import Practice from './pages/Practice'
 const SqlPlayground = lazy(() => import('./pages/SqlPlayground'))
+const CodingArena = lazy(() => import('./pages/CodingArena'))
 
 function App() {
   const [user,setUser]= useState(null)
@@ -115,6 +116,10 @@ function App() {
 
       <Route path='/practice/sql' element={
       user ? <Suspense fallback={<div className="p-8 text-sm text-black/50">Loading SQL playground…</div>}><SqlPlayground /></Suspense>
+      : <Navigate to="/" replace/> }/>
+
+      <Route path='/practice/coding' element={
+      user ? <Suspense fallback={<div className="p-8 text-sm text-black/50">Loading coding arena…</div>}><CodingArena /></Suspense>
       : <Navigate to="/" replace/> }/>
 
 

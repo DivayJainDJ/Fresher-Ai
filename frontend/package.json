@@ -16,6 +16,7 @@
     "axios": "^1.18.1",
     "firebase": "^12.16.0",
     "motion": "^12.42.2",
+    "pyodide": "^314.0.7",
     "react": "^19.2.7",
     "react-circular-progressbar": "^2.2.0",
     "react-dom": "^19.2.7",
@@ -36,6 +37,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
-    "vite": "7.3.1"
+    "vite": "7.3.1",
+    "vite-plugin-static-copy": "^4.1.1"
   }
 }

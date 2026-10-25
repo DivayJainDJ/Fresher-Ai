@@ -27,9 +27,10 @@ int main() {
     return 0;
 }`,
 };
-function CodeEditor({ onClose, onSubmitCode }) {
-   const [lang ,setLang] = useState("javascript")
-   const [code, setCode] = useState(DEFAULT_CODE["javascript"]);
+function CodeEditor({ onClose, onSubmitCode, languageOptions = LANG_OPTIONS, initialLanguage = "javascript", initialCode, starterCodeByLanguage = {} , submitLabel = "Add To Answer" }) {
+   const [lang ,setLang] = useState(initialLanguage)
+   const [codeByLanguage, setCodeByLanguage] = useState(() => ({ ...DEFAULT_CODE, ...starterCodeByLanguage, [initialLanguage]: initialCode ?? starterCodeByLanguage[initialLanguage] ?? DEFAULT_CODE[initialLanguage] }))
+   const code = codeByLanguage[lang] ?? starterCodeByLanguage[lang] ?? DEFAULT_CODE[lang] ?? ""
   return (
     
       <>
@@ -59,10 +60,10 @@ function CodeEditor({ onClose, onSubmitCode }) {
             </div>
 
             <div className='flex items-center gap-1.5 mx-auto'>
-              {LANG_OPTIONS.map((l)=>(
+              {languageOptions.map((l)=>(
                 <button key={l} onClick={()=>{
                   setLang(l);
-                  setCode(DEFAULT_CODE[l])}}
+                }}
                  className={`text-xs px-2.5 py-1 rounded-lg capitalize transition-all ${
                       lang === l
                         ? "bg-white text-[#0A0A0A] font-semibold"
@@ -85,7 +86,7 @@ function CodeEditor({ onClose, onSubmitCode }) {
                height="100%"
                 language={lang}
                 value={code}
-                onChange={(v) => setCode(v || "")}
+                onChange={(v) => setCodeByLanguage((previous) => ({ ...previous, [lang]: v || "" }))}
                 theme="vs-dark"
                 options={{
                   fontSize: 13,
@@ -102,7 +103,7 @@ function CodeEditor({ onClose, onSubmitCode }) {
             </div>
 
             <div className='relative border-t border-white/8 px-4 py-3 flex justify-end'>
-            <button onClick={()=>onSubmitCode?.(code)} className='flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg bg-white text-[#0A0A0A] font-semibold hover:bg-white/90 transition-all'>Add To Answer</button>
+            <button onClick={()=>onSubmitCode?.(code, lang)} className='flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg bg-white text-[#0A0A0A] font-semibold hover:bg-white/90 transition-all'>{submitLabel}</button>
             </div>
 
         </motion.div>

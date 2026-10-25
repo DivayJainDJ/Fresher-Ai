@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react"
 import { GiArtificialHive, GiTwoCoins } from 'react-icons/gi'
-import { FiBookOpen, FiDatabase, FiFileText, FiLogOut, FiMap, FiPlus, FiSidebar, FiStar } from 'react-icons/fi'
+import { FiBookOpen, FiCode, FiDatabase, FiFileText, FiLogOut, FiMap, FiPlus, FiSidebar, FiStar } from 'react-icons/fi'
 import { useNavigate } from "react-router-dom"
 import { FaCirclePlus } from "react-icons/fa6";
 
@@ -29,6 +29,11 @@ const NAV_ITEMS = [
         icon: <FiDatabase size={15} />,
         label: "SQL Playground",
         path: "/practice/sql",
+    },
+    {
+        icon: <FiCode size={15} />,
+        label: "Coding Arena",
+        path: "/practice/coding",
     },
 
 

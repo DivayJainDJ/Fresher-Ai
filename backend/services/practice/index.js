@@ -13,6 +13,9 @@ import SqlProblem from "./models/SqlProblem.js";
 import SqlAttempt from "./models/SqlAttempt.js";
 import { approvedQuestions } from "./seeds/approvedQuestions.js";
 import { sqlProblems } from "./seeds/sqlProblems.js";
+import CodingProblem from "./models/CodingProblem.js";
+import CodeAttempt from "./models/CodeAttempt.js";
+import { codingProblems } from "./seeds/codingProblems.js";
 
 const app = express();
 app.use((req, res, next) => {
@@ -40,11 +43,19 @@ const seedSqlProblems = async () => {
   console.log(`SQL problem bank ready (${sqlProblems.length} bundled problems)`);
 };
 
+const seedCodingProblems = async () => {
+  await CodingProblem.bulkWrite(codingProblems.map((problem) => ({
+    updateOne: { filter: { slug: problem.slug }, update: { $setOnInsert: problem }, upsert: true },
+  })), { ordered: false });
+  console.log(`Coding problem bank ready (${codingProblems.length} bundled problems)`);
+};
+
 const start = async () => {
   await connectDB();
-  await Promise.all([Question.init(), QuizAttempt.init(), SqlProblem.init(), SqlAttempt.init()]);
+  await Promise.all([Question.init(), QuizAttempt.init(), SqlProblem.init(), SqlAttempt.init(), CodingProblem.init(), CodeAttempt.init()]);
   await seedQuestionBank();
   await seedSqlProblems();
+  await seedCodingProblems();
   const port = process.env.PORT || 6007;
   const server = app.listen(port, "0.0.0.0", () => console.log(`Practice service started on ${port}`));
   const shutdown = (signal) => {

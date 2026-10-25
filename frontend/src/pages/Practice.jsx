@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiArrowLeft, FiArrowRight, FiCheckCircle, FiClock, FiDatabase, FiRotateCcw } from 'react-icons/fi'
+import { FiArrowLeft, FiArrowRight, FiCheckCircle, FiClock, FiCode, FiDatabase, FiRotateCcw } from 'react-icons/fi'
 import api from '../utils/axios'
 
 const topics = [
@@ -84,7 +84,7 @@ function Practice() {
   return (
     <main className="min-h-screen bg-[#f7f7f5] px-4 py-8 text-[#111] sm:px-8">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-3"><button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 text-sm text-black/55 hover:text-black"><FiArrowLeft /> Dashboard</button><button onClick={() => navigate('/practice/sql')} className="inline-flex items-center gap-2 rounded-lg border border-black/15 bg-white px-3 py-2 text-sm font-medium hover:border-black/35"><FiDatabase /> SQL Playground</button></div>
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3"><button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 text-sm text-black/55 hover:text-black"><FiArrowLeft /> Dashboard</button><div className="flex gap-2"><button onClick={() => navigate('/practice/sql')} className="inline-flex items-center gap-2 rounded-lg border border-black/15 bg-white px-3 py-2 text-sm font-medium hover:border-black/35"><FiDatabase /> SQL Playground</button><button onClick={() => navigate('/practice/coding')} className="inline-flex items-center gap-2 rounded-lg border border-black/15 bg-white px-3 py-2 text-sm font-medium hover:border-black/35"><FiCode /> Coding Arena</button></div></div>
         <header className="mb-8">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-black/45">Practice studio</p>
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Sharpen your fundamentals.</h1>

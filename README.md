@@ -13,6 +13,7 @@ FresherAI helps fresh graduates prepare for tech interviews with:
 - **Learning Roadmaps** — Personalized skill development paths based on your goals
 - **Practice Quizzes** — Timed aptitude and CS fundamentals quizzes from a bundled, approved question bank
 - **SQL Playground** — Browser-local SQLite exercises with instant result checking and no server-side query execution
+- **Coding Arena** — Original JavaScript and Python challenges run in disposable browser workers; optional cached complexity reviews cost 5 interview coins
 - **Credit System** — Pay-per-use billing with Razorpay integration
 
 ---
@@ -42,7 +43,7 @@ Auth  Resume  Interview   Roadmap   Billing   Progress   Practice
 | Roadmap | 6004 | Personalized learning paths |
 | Billing | 6005 | Credit system, Razorpay |
 | Progress | 6006 | Redis Stream event consumer, progress and streak aggregates |
-| Practice | 6007 | Timed quizzes, SQL problem bank, and pass/fail attempt recording |
+| Practice | 6007 | Timed quizzes, SQL and coding problem banks, and practice attempt recording |
 | Frontend | 5173 | React + Vite client |
 
 ---
@@ -93,7 +94,7 @@ Fresher-Ai/
 - Firebase project
 - API keys: Groq, Razorpay
 
-Practice quizzes and SQL playground sessions run without LLM keys. SQL executes in a disposable SQLite WebAssembly database in the browser; only pass/fail and elapsed time are recorded by the backend. To draft extra quiz questions manually, set `GROQ_API_KEY` and run `node scripts/generate-questions.js <topic> [count]`; generated questions stay in draft status until explicitly approved. Approve selected IDs with `node scripts/approve-questions.js <id...>` or approve all drafts with `--all`.
+Practice quizzes, SQL exercises, and coding problems run without LLM keys. SQL and JavaScript/Python solutions execute in disposable browser contexts; Python uses locally bundled Pyodide assets. Coding scores are browser-reported practice stats and can be tampered with, so they never award coins or count toward authoritative leaderboards. Optional AI code review uses the interview LLM cache and costs 5 coins. To draft extra quiz questions manually, set `GROQ_API_KEY` and run `node scripts/generate-questions.js <topic> [count]`; generated questions stay in draft status until explicitly approved. Approve selected IDs with `node scripts/approve-questions.js <id...>` or approve all drafts with `--all`.
 
 ### Installation
 
