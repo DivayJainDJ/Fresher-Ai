@@ -17,6 +17,13 @@ const startInterviewSchema = z.object({
 const answerSchema = z.object({
     interviewId: z.string().min(1),
     answer: z.string().trim().min(1).max(12000),
+    deliveryMetrics: z.object({
+        wordsPerMinute: z.number().finite().min(0).max(2000),
+        fillerCount: z.number().int().min(0).max(1000),
+        fillerWords: z.array(z.enum(["um", "uh", "like", "you know", "basically", "actually"])).max(1000),
+        longestPauseMs: z.number().int().min(0).max(3_600_000),
+        answerLength: z.number().int().min(0).max(12000),
+    }).optional(),
 }).strict();
 
 
@@ -162,6 +169,7 @@ export const submitAnswer = async (req, res) => {
         }
 
         currentQuestion.userAnswer = answer;
+        if (parsed.data.deliveryMetrics) currentQuestion.deliveryMetrics = parsed.data.deliveryMetrics;
 
         const completed = interview.currentQuestion + 1 >=
             interview.questions.length;
@@ -181,6 +189,7 @@ export const submitAnswer = async (req, res) => {
 
             type: interview.type,
             category: currentQuestion.category,
+            deliveryMetrics: currentQuestion.deliveryMetrics,
 
             questions: interview.questions,
         })

@@ -4,9 +4,17 @@ import { FiArrowLeft, FiAward, FiCheck, FiTarget, FiTrendingUp, FiX } from 'reac
 import { useNavigate } from 'react-router-dom'
 import DownloadBtn from '../resume/DownloadBtn'
 import { FiActivity } from 'react-icons/fi'
+import { deliveryTip } from '../../utils/deliveryMetrics'
 function Step3report({ report, user, setUser }) {
   const navigate = useNavigate()
   const reportRef = useRef(null)
+  const deliveryAnswers = (report.questions || []).filter((item) => item.deliveryMetrics)
+  const maxPace = Math.max(120, ...deliveryAnswers.map((item) => item.deliveryMetrics.wordsPerMinute || 0))
+  const avgMetrics = deliveryAnswers.length ? {
+    wordsPerMinute: Math.round(deliveryAnswers.reduce((total, item) => total + item.deliveryMetrics.wordsPerMinute, 0) / deliveryAnswers.length),
+    fillerCount: deliveryAnswers.reduce((total, item) => total + item.deliveryMetrics.fillerCount, 0),
+    longestPauseMs: Math.max(...deliveryAnswers.map((item) => item.deliveryMetrics.longestPauseMs)),
+  } : null
   return (
     <div className='min-h-screen bg-white flex items-center justify-center md:p-5'>
 
@@ -46,6 +54,20 @@ function Step3report({ report, user, setUser }) {
 
 
         <div className='p-8' ref={reportRef}>
+          {deliveryAnswers.length > 0 && <section className="mb-6 rounded-2xl border border-black/10 bg-white p-5" aria-labelledby="delivery-report-title">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h2 id="delivery-report-title" className="text-lg font-bold text-gray-900">Delivery report</h2><p className="mt-1 text-sm text-gray-500">Speech was processed in your browser. No audio was uploaded or stored.</p></div>
+              <div className="rounded-xl bg-gray-100 px-4 py-2 text-sm text-gray-700">{avgMetrics.wordsPerMinute} avg. words/min · {avgMetrics.fillerCount} fillers</div>
+            </div>
+            <div className="mt-5 space-y-4" role="img" aria-label="Words per minute for each interview answer">
+              {deliveryAnswers.map((item, index) => <div key={index}>
+                <div className="mb-1 flex justify-between gap-3 text-xs text-gray-600"><span className="truncate">Answer {index + 1}: {item.question}</span><span className="shrink-0 font-semibold">{item.deliveryMetrics.wordsPerMinute} wpm</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, item.deliveryMetrics.wordsPerMinute / maxPace * 100)}%` }} /></div>
+                <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-gray-500"><span>{item.deliveryMetrics.answerLength} words</span><span>{item.deliveryMetrics.fillerCount} fillers{item.deliveryMetrics.fillerWords?.length ? `: ${item.deliveryMetrics.fillerWords.join(', ')}` : ''}</span><span>Longest pause: {Math.round(item.deliveryMetrics.longestPauseMs / 1000)}s</span></div>
+              </div>)}
+            </div>
+            <p className="mt-5 rounded-xl bg-indigo-50 px-4 py-3 text-sm text-indigo-900"><strong>One improvement tip:</strong> {deliveryTip(avgMetrics)}</p>
+          </section>}
           {report.type === 'behavioral' && <section className="mb-5 rounded-2xl border border-black/10 bg-white p-5"><div className="flex items-center gap-2"><FiActivity/><h2 className="font-bold">STAR coach results</h2></div><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(report.questions?.[0]?.feedback?.starScore || {}).map(([name, score]) => <div key={name} className="rounded-xl bg-gray-100 p-3"><p className="text-xs capitalize text-black/45">{name}</p><p className="mt-1 text-xl font-bold">{score}<span className="text-xs text-black/40"> / 5</span></p></div>)}</div><p className="mt-4 text-sm text-black/60">{report.questions?.[0]?.feedback?.improvedAnswer}</p>{report.questions?.[0]?.feedback?.nextSteps?.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-black/55">{report.questions[0].feedback.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>}</section>}
           <div className='grid md:grid-cols-3 gap-5'>
             <div className='rounded-2xl bg-[#17181E] border border-white/10 p-6'>
@@ -222,7 +244,7 @@ function Step3report({ report, user, setUser }) {
                       <h5 className='mt-2 text-xl font-bold text-white'>
                         {item.feedback?.score ?? 0}
                       </h5>
-                      
+
                       </div>
 
                       <div className='rounded-xl bg-black/20 p-3.5'>
@@ -230,7 +252,7 @@ function Step3report({ report, user, setUser }) {
                       <h5 className='mt-2 text-xl font-bold text-white'>
                         {item.feedback?.clarity ?? 0}
                       </h5>
-                      
+
                       </div>
 
                       <div className='rounded-xl bg-black/20 p-3.5'>
@@ -238,7 +260,7 @@ function Step3report({ report, user, setUser }) {
                       <h5 className='mt-2 text-xl font-bold text-white'>
                         {item.feedback?.relevance ?? 0}
                       </h5>
-                      
+
                       </div>
 
                       <div className='rounded-xl bg-black/20 p-3.5'>
@@ -246,7 +268,7 @@ function Step3report({ report, user, setUser }) {
                       <h5 className='mt-2 text-xl font-bold text-white'>
                         {item.feedback?.communication ?? 0}
                       </h5>
-                      
+
                       </div>
                     </div>
 

@@ -17,7 +17,7 @@ export async function interviewNode(state) {
     return {
         questions
     }
-    
+
 }
 
 export async function feedbackNode(state) {
@@ -30,6 +30,7 @@ export async function feedbackNode(state) {
 
         type: state.type,
         category: state.category,
+        deliveryMetrics: state.deliveryMetrics,
 
     })
 

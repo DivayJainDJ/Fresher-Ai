@@ -20,6 +20,8 @@ const InterviewState = Annotation.Root({
 
     answer: Annotation(),
 
+    deliveryMetrics: Annotation(),
+
     difficulty: Annotation(),
 
     feedback: Annotation(),

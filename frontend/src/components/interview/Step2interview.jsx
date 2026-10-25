@@ -7,19 +7,21 @@ import CodeEditor from './CodeEditor'
 import Timer from './Timer'
 import { submitAnswer } from '../../apis/interview.api'
 import { useNavigate } from 'react-router-dom'
+import { calculateDeliveryMetrics } from '../../utils/deliveryMetrics'
 function Step2interview({ interviewData, user }) {
 const navigate = useNavigate()
   // ── State ──
   const [question, setQuestion] = useState(interviewData.question);
   const [currentIndex, setCurrentIndex] = useState(interviewData.currentQuestion || 0);
   const [answer, setAnswer] = useState("");
+  const [speechSupported, setSpeechSupported] = useState(false)
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(interviewData.question.timer || 60);
   const [timerActive, setTimerActive] = useState(true); // paused once the answer is submitted
 
   // UI toggles
-  const [micOn, setMicOn] = useState(true); // user's manual preference — only changed by the mic button
+  const [micOn, setMicOn] = useState(false); // the user starts speech capture explicitly
   const [cameraOn, setCameraOn] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
 
@@ -35,6 +37,9 @@ const navigate = useNavigate()
   const userVideoRef = useRef(null);
   const recognitionRef = useRef(null);
   const streamRef = useRef(null);
+  const answerStartedAtRef = useRef(null);
+  const transcriptTimesRef = useRef([]);
+  const lastSpeechResultRef = useRef('');
 
 
   const videoSource = voiceGender === "female" ? femaleVideo : maleVideo
@@ -44,21 +49,33 @@ const navigate = useNavigate()
   // Speech recognition
 
   useEffect(()=>{
-    if(!("webkitSpeechRecognition" in window))return;
-    const rec = new window.webkitSpeechRecognition()
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!Recognition) { setSpeechSupported(false); return; }
+    setSpeechSupported(true);
+    const rec = new Recognition()
      rec.lang = "en-US";
     rec.continuous = true;
     rec.interimResults = false;
+    rec.onerror = () => setMicOn(false);
     rec.onresult = (e)=>{
-      const t = e.results[e.results.length - 1][0].transcript;
-      setAnswer((prev)=>prev + " "+ t)
+      for (let index = e.resultIndex; index < e.results.length; index += 1) {
+        if (!e.results[index].isFinal) continue
+        const t = e.results[index][0].transcript.trim();
+        if (!t || t === lastSpeechResultRef.current) continue;
+        lastSpeechResultRef.current = t;
+        const capturedAt = Date.now();
+        if (!answerStartedAtRef.current) answerStartedAtRef.current = capturedAt;
+        transcriptTimesRef.current.push(capturedAt);
+        setAnswer((prev)=>`${prev}${prev.trim() ? ' ' : ''}${t}`)
+      }
     }
     recognitionRef.current = rec
   },[])
 
 
   const startMic = ()=>{
-    recognitionRef.current?.start()
+    if (!recognitionRef.current) return;
+    try { recognitionRef.current.start() } catch (error) { if (error.name !== 'InvalidStateError') console.warn('Speech recognition unavailable', error) }
   }
   const stopMic = ()=>{
     recognitionRef.current?.stop()
@@ -99,12 +116,14 @@ const navigate = useNavigate()
   }
 
   const handleSubmitCode= (code) => {
+   if (!answerStartedAtRef.current) answerStartedAtRef.current = Date.now()
+   transcriptTimesRef.current.push(Date.now())
    setAnswer((prev)=>{
     const separator = prev.trim() ? "\n\n--- Code ---\n" : "--- Code ---\n";
     return prev + separator + code
    });
    setCodeOpen(false)
-    
+
   }
 
   useEffect(()=>{
@@ -117,6 +136,7 @@ const navigate = useNavigate()
 
   useEffect(()=>{
     const load = ()=>{
+      if (!window.speechSynthesis) return
       const voices = window.speechSynthesis.getVoices()
       if(!voices.length)return;
       const female = voices.find(v => /zira|samantha|female/i.test(v.name));
@@ -126,13 +146,13 @@ const navigate = useNavigate()
       else             { setSelectedVoice(voices[0]); setVoiceGender("female"); }
     }
     load()
-    window.speechSynthesis.onvoiceschanged = load
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = load
 
   },[])
 
   const speakText = (text)=>
     new Promise((resolve)=>{
-      if (!window.speechSynthesis || !selectedVoice || !text?.trim()) { resolve(); return; }
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance || !selectedVoice || !text?.trim()) { resolve(); return; }
 
       window.speechSynthesis.cancel()
 
@@ -156,9 +176,9 @@ const navigate = useNavigate()
         setSubtitle(text)
         window.speechSynthesis.speak(utter)
       },150)
-    
+
     })
-  
+
 
   useEffect(()=>{
     if(!selectedVoice || introSpoken)return;
@@ -182,7 +202,7 @@ const navigate = useNavigate()
 
   },[interviewData])
 
-  
+
   useEffect(()=>{
     if(!selectedVoice || !introSpoken)return;
     const speakQuestion = async () => {
@@ -201,15 +221,34 @@ const navigate = useNavigate()
 
 
 
+  const recordTypedAnswer = (value) => {
+    const now = Date.now()
+    if (value.trim() && !answerStartedAtRef.current) answerStartedAtRef.current = now
+    const previous = transcriptTimesRef.current.at(-1)
+    if (value.trim() && (!previous || now - previous >= 250)) transcriptTimesRef.current.push(now)
+    setAnswer(value)
+  }
+
+  const getDeliveryMetrics = (transcript, endedAt = Date.now()) => calculateDeliveryMetrics(
+    transcript, answerStartedAtRef.current || endedAt, endedAt, transcriptTimesRef.current,
+  )
+
+  const resetDeliveryTiming = () => {
+    answerStartedAtRef.current = null
+    transcriptTimesRef.current = []
+    lastSpeechResultRef.current = ''
+  }
+
   useEffect(()=>{
     if(timeLeft !== 0)return;
     const autoSubmit = async () => {
-      await speakText("Time is up. Submitting your answer now.");
       const finalAnswer = answer.trim() || "No answer provided. Time over.";
+      const deliveryMetrics = getDeliveryMetrics(finalAnswer)
+      await speakText("Time is up. Submitting your answer now.");
 
       setLoading(true)
 
-    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer:finalAnswer})
+    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer:finalAnswer, deliveryMetrics })
 
     if(!res){
       setLoading(false);
@@ -240,6 +279,7 @@ const navigate = useNavigate()
       setQuestion(res.question);
       setCurrentIndex(res.currentQuestion);
       setAnswer("");
+      resetDeliveryTiming()
       setFeedback(null);
 
 
@@ -247,7 +287,7 @@ const navigate = useNavigate()
 
 
     autoSubmit()
-   
+
 
   },[timeLeft])
 
@@ -259,7 +299,7 @@ const navigate = useNavigate()
     setTimerActive(false)
     setLoading(true)
 
-    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer})
+    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer, deliveryMetrics: getDeliveryMetrics(answer) })
 
     if(!res){
       setLoading(false);
@@ -290,6 +330,7 @@ const navigate = useNavigate()
       setQuestion(res.question);
       setCurrentIndex(res.currentQuestion);
       setAnswer("");
+      resetDeliveryTiming()
       setFeedback(null);
 
   }
@@ -302,7 +343,7 @@ const navigate = useNavigate()
     }
   }, [])
 
-  
+
 
 
   return (
@@ -360,10 +401,10 @@ const navigate = useNavigate()
 
                 </motion.div>}
 
-             
+
             </AnimatePresence>
 
-            
+
           </div>
 
 
@@ -387,15 +428,15 @@ const navigate = useNavigate()
                 <span className='text-2xl font-bold text-white'>{user?.name.charAt(0).toUpperCase()}</span>
                 </div>
                 <span className='text-xs text-white/35'>{user?.name.split(" ")[0]}</span>
-                </div>}     
+                </div>}
           </div>
 
 
           <div className='flex flex-col items-center gap-1.5 pt-1'>
             <div className='flex items-center justify-center gap-3'>
               <motion.button
-              onClick={toggleMic} 
-              whileHover={{ scale: 1.08 }} 
+              onClick={toggleMic} disabled={!speechSupported} title={speechSupported ? "Toggle speech input" : "Speech recognition is not supported in this browser"}
+              whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.93 }}
               className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${
                   showMicon ? "bg-white/10 border-white/15 text-white" : "bg-red-500/20 border-red-500/30 text-red-400"
@@ -404,26 +445,26 @@ const navigate = useNavigate()
 
               </motion.button>
 
-              <motion.button 
-              whileHover={{ scale: 1.08 }} 
+              <motion.button
+              whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.93 }}
               onClick={toggleCamera}
               className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all ${
                   cameraOn ? "bg-white/10 border-white/15 text-white" : "bg-white/5 border-white/10 text-white/45 hover:text-white/70"
                 }`}>
                   {cameraOn ? <FiCamera size={15}/> : <FiCameraOff size={15}/>}
-                
+
 
               </motion.button>
 
-              <motion.button 
-              whileHover={{ scale: 1.08 }} 
+              <motion.button
+              whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.93 }}
               onClick={()=>setCodeOpen(true)}
               className="w-10 h-10 rounded-xl flex items-center justify-center border bg-white/5 border-white/10 text-white/45 hover:text-white/70 hover:border-white/20 transition-all">
 
                 <FiCode size={15}/>
-                
+
               </motion.button>
 
 
@@ -448,7 +489,7 @@ const navigate = useNavigate()
 
           <div className='flex items-start justify-between mb-4'>
 
-            <div> 
+            <div>
               <h2 className='text-base sm:text-lg font-semibold text-white'>
                 AI Interview
               </h2>
@@ -466,7 +507,7 @@ const navigate = useNavigate()
           </div>
 
 
-          <motion.div 
+          <motion.div
           initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           className='relative overflow-hidden rounded-xl bg-[#17181E] border border-white/8 p-4 sm:p-5 mb-4'>
@@ -482,6 +523,8 @@ const navigate = useNavigate()
 
           </motion.div>
 
+          <p className='mb-3 text-[11px] text-white/45'>Speech is processed in your browser. No audio is uploaded or stored.</p>
+
           <div className='mb-3'>
             <div className='flex justify-between text-[10px] text-white/35 mb-1'>
             <span>Progress</span>
@@ -494,18 +537,18 @@ const navigate = useNavigate()
           <div className='flex-1 flex flex-col min-h-0'>
             <label className='text-xs font-medium text-zinc-400 mb-1.5'>Your Answer</label>
             <textarea
-            onChange={(e)=>setAnswer(e.target.value)}
+            onChange={(e)=>recordTypedAnswer(e.target.value)}
             value={answer}
             rows={5}
             onKeyDown={(e)=>{if(e.ctrlKey && e.key === "Enter") submit()}}
-            placeholder='Write your answer here… or speak if mic is on'
+            placeholder={speechSupported ? 'Write your answer here… or speak if mic is on' : 'Speech input is unavailable in this browser — type your answer here.'}
              className='flex-1 w-full rounded-xl bg-[#17181E] border border-white/8 p-4 text-sm text-white outline-none resize-none focus:border-white/25 transition placeholder-white/20'/>
           </div>
 
           <div className='mt-3 min-h-[0px]'>
             <AnimatePresence>
             {feedback && (
-                <motion.div 
+                <motion.div
                 initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 ,y:6}}
@@ -529,14 +572,14 @@ const navigate = useNavigate()
             </span>to Submit
           </span>
 
-          <motion.button 
+          <motion.button
           whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={submit}
               disabled={loading || !answer.trim()}
               className='ml-auto h-10 min-w-[150px] justify-center px-5 rounded-xl bg-white text-black text-sm font-semibold flex items-center gap-2 disabled:opacity-40 transition'
 
-              
+
               >
                  {loading ? (
                 <>
@@ -548,7 +591,7 @@ const navigate = useNavigate()
               )}
 
           </motion.button>
-          
+
           </div>
 
 

@@ -25,6 +25,13 @@ export const feedbackAgent = async (data) => {
                 feedback.nextSteps[feedback.nextSteps.length - 1] = "Add the result, outcome, or measurable impact.";
             }
         }
+        if (data.deliveryMetrics) {
+            const metrics = data.deliveryMetrics;
+            feedback.nextSteps = [...feedback.nextSteps, `Delivery: ${metrics.wordsPerMinute} words per minute, ${metrics.fillerCount} filler words, and a ${Math.round(metrics.longestPauseMs / 1000)} second longest pause.`];
+            if (metrics.fillerCount >= 3) feedback.nextSteps.push("Replace filler words with brief pauses.");
+            else if (metrics.wordsPerMinute > 170) feedback.nextSteps.push("Slow down slightly between key points.");
+            feedback.nextSteps = feedback.nextSteps.slice(0, 4);
+        }
         if (data.question?.toLowerCase().includes("restructure this rough story")) {
             feedback.improvedAnswer = feedback.improvedAnswer
                 .replace(/\bSituation:\s*/i, "Situation: ")
@@ -35,5 +42,13 @@ export const feedbackAgent = async (data) => {
         return feedback;
     }
     const response = await invokeWithRetry(llm, feedbackPrompt(data), 3, { skipCache: true })
-    return JSON.parse(cleanJson(response.content))
+    const feedback = JSON.parse(cleanJson(response.content))
+    const metrics = data.deliveryMetrics
+    if (metrics) {
+        const delivery = `Delivery: ${metrics.wordsPerMinute} words per minute, ${metrics.fillerCount} filler words, longest pause ${Math.round(metrics.longestPauseMs / 1000)} seconds.`
+        feedback.feedback = `${feedback.feedback || ""} ${delivery}`.trim()
+        if (metrics.fillerCount >= 3) feedback.improvements = [...(feedback.improvements || []), "Replace filler words with brief pauses."].slice(0, 3)
+        else if (metrics.wordsPerMinute > 170) feedback.improvements = [...(feedback.improvements || []), "Slow down slightly between key points."].slice(0, 3)
+    }
+    return feedback
 }

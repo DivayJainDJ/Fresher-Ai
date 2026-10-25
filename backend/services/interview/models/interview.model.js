@@ -101,6 +101,13 @@ const questionSchema = new mongoose.Schema(
             type: feedbackSchema,
             default: () => ({}),
         },
+        deliveryMetrics: {
+            wordsPerMinute: { type: Number, min: 0, max: 2000 },
+            fillerCount: { type: Number, min: 0, max: 1000 },
+            fillerWords: { type: [String], default: [] },
+            longestPauseMs: { type: Number, min: 0, max: 3_600_000 },
+            answerLength: { type: Number, min: 0, max: 12000 },
+        },
     },
     { _id: false }
 );
