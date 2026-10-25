@@ -101,6 +101,7 @@ const questionSchema = new mongoose.Schema(
             type: feedbackSchema,
             default: () => ({}),
         },
+        feedbackRequestKey: { type: String, default: "" },
         deliveryMetrics: {
             wordsPerMinute: { type: Number, min: 0, max: 2000 },
             fillerCount: { type: Number, min: 0, max: 1000 },

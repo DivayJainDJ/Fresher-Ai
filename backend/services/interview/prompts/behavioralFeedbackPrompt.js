@@ -8,8 +8,8 @@ Category: ${category || "general"}
 Difficulty: ${difficulty || "medium"}
 Candidate answer: ${wrapUntrustedText("candidate_answer", answer)}
 
-Return only valid JSON with this exact shape:
-{"starScore":{"situation":0,"task":0,"action":0,"result":0},"clarity":0,"confidence":0,"improvedAnswer":"","nextSteps":[]}
+Return only valid JSON with this exact shape, beginning with improvedAnswer so the coach can display it while the rest is generated:
+{"improvedAnswer":"","starScore":{"situation":0,"task":0,"action":0,"result":0},"clarity":0,"confidence":0,"nextSteps":[]}
 
 Each STAR score is an integer 0-5. Clarity and confidence are integers 0-100. Score each STAR element only when supported by the answer; missing elements score 0 or 1. For a one-line answer, score Result low (0 or 1) and explicitly name the missing outcome in nextSteps. improvedAnswer should preserve only provided facts; use short bracketed placeholders for missing facts instead of inventing details. nextSteps has 2-4 concise actionable items, including missing STAR elements.
 `;

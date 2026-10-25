@@ -1,3 +1,5 @@
+import { wrapUntrustedText } from "../../../shared/prompts/untrustedText.js";
+
 const feedbackPrompt = ({
   question,
   answer,
@@ -16,13 +18,13 @@ Do NOT sound like an AI.
 Question
 ------------------------------------------------
 
-${question}
+${wrapUntrustedText("question", question)}
 
 ------------------------------------------------
 Candidate Answer
 ------------------------------------------------
 
-${answer}
+${wrapUntrustedText("candidate_answer", answer)}
 
 ------------------------------------------------
 Difficulty
@@ -139,11 +141,12 @@ Examples
 Do NOT repeat the feedback.
 
 ================================================
-Return ONLY valid JSON.
+Return ONLY valid JSON. Put the "feedback" property first in the object so it can be displayed as soon as it is generated.
 
 Example
 
 {
+  "feedback":"Good answer. Adding more implementation details would make it stronger.",
   "score":84,
   "correctness":87,
   "clarity":82,
@@ -153,7 +156,6 @@ Example
   "communication":85,
   "problemSolving":83,
   "creativity":75,
-  "feedback":"Good answer. Adding more implementation details would make it stronger.",
   "improvements":[
     "Use practical examples.",
     "Explain key concepts clearly.",

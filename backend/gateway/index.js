@@ -92,9 +92,11 @@ const warmServices = () => {
 if (process.env.ON_RENDER === "true") setTimeout(warmServices, 3000)
 
 app.use((req, res, next) => {
-    const timeout = req.path.includes("/generate") || req.path.includes("/upload")
-        ? 180_000
-        : 60_000
+    const timeout = req.path.includes("/feedback/stream")
+        ? 120_000
+        : req.path.includes("/generate") || req.path.includes("/upload")
+            ? 180_000
+            : 60_000
 
     req.setTimeout(timeout, () => {
         if (!res.headersSent) {
@@ -119,6 +121,12 @@ const aiRateLimiter = tokenBucketRateLimiter({ capacity: 12, refillPerSecond: 0.
 
 app.use("/api/auth", proxyWithHeaders(process.env.AUTH_SERVICE_URL, "/api/auth"))
 app.use("/api/resume", isAuth, aiRateLimiter, proxyWithHeaders(process.env.RESUME_SERVICE_URL, "/api/resume"))
+app.post("/api/interview/feedback/stream", isAuth, aiRateLimiter, (req, res, next) => {
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Content-Encoding", "identity");
+    next();
+}, proxyWithHeaders(process.env.INTERVIEW_SERVICE_URL, "/api/interview", { sse: true, timeoutMs: 120_000 }))
 app.use("/api/interview", isAuth, aiRateLimiter, proxyWithHeaders(process.env.INTERVIEW_SERVICE_URL, "/api/interview"))
 app.use("/api/roadmap", isAuth, aiRateLimiter, proxyWithHeaders(process.env.ROADMAP_SERVICE_URL, "/api/roadmap"))
 app.use("/api/progress", isAuth, proxyWithHeaders(process.env.PROGRESS_SERVICE_URL, "/api/progress"))

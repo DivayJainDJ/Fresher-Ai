@@ -3,7 +3,7 @@ import { normalizeServiceUrl } from "./normalizeServiceUrl.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false, rawBody = false } = {}) => {
+export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false, rawBody = false, sse = false, timeoutMs = 180_000 } = {}) => {
     const target = normalizeServiceUrl(serviceUrl);
 
     if (!target) {
@@ -15,8 +15,8 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
     return createProxyMiddleware({
         target,
         changeOrigin: true,
-        proxyTimeout: 180_000,
-        timeout: 180_000,
+        proxyTimeout: sse ? timeoutMs : 180_000,
+        timeout: sse ? timeoutMs : 180_000,
         selfHandleResponse: false,
         pathRewrite: (path) => {
             const rewrittenPath = path.replace(routeRegex, "");
@@ -24,6 +24,10 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
         },
         on: {
             proxyReq: (proxyReq, req) => {
+                if (sse) {
+                    proxyReq.setHeader("accept-encoding", "identity");
+                    proxyReq.setHeader("accept", "text/event-stream");
+                }
                 if (req.requestId) proxyReq.setHeader("x-request-id", req.requestId);
                 if (req.user?.userId) {
                     proxyReq.setHeader("x-user-id", req.user.userId);
@@ -47,8 +51,22 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
                     fixRequestBody(proxyReq, req);
                 }
             },
+            proxyRes: (_proxyRes, _req, res) => {
+                if (!sse) return;
+                res.setHeader("Cache-Control", "no-cache, no-transform");
+                res.setHeader("X-Accel-Buffering", "no");
+                res.setHeader("Content-Encoding", "identity");
+            },
             error: (error, req, res) => {
                 console.error(`proxy error [${routePrefix}] -> ${target}`, error.message);
+
+                if (sse && res.headersSent && !res.destroyed && !res.writableEnded) {
+                    try {
+                        res.write(`event: error\ndata: ${JSON.stringify({ message: "Feedback stream connection failed" })}\n\n`);
+                        res.end();
+                    } catch { /* The client has already disconnected. */ }
+                    return;
+                }
 
                 if (!res.headersSent) {
                     const origin = req.headers.origin;

@@ -5,9 +5,30 @@ import { AnimatePresence, motion } from "motion/react"
 import { FiArrowRight, FiCamera, FiCameraOff, FiClock, FiCode, FiMessageSquare, FiMic, FiMicOff } from 'react-icons/fi'
 import CodeEditor from './CodeEditor'
 import Timer from './Timer'
-import { submitAnswer } from '../../apis/interview.api'
+import { submitAnswerStream } from '../../apis/interview.api'
 import { useNavigate } from 'react-router-dom'
 import { calculateDeliveryMetrics } from '../../utils/deliveryMetrics'
+const partialJsonStringField = (text, field) => {
+  const key = text.indexOf(`"${field}"`)
+  if (key < 0) return null
+  const colon = text.indexOf(':', key)
+  if (colon < 0) return null
+  const start = text.indexOf('"', colon + 1)
+  if (start < 0) return null
+  let escaped = false
+  for (let index = start + 1; index < text.length; index += 1) {
+    if (escaped) { escaped = false; continue }
+    if (text[index] === '\\') { escaped = true; continue }
+    if (text[index] === '"') {
+      try { return JSON.parse(text.slice(start, index + 1)) } catch { return text.slice(start + 1, index) }
+    }
+  }
+  const partial = text.slice(start + 1)
+  try { return JSON.parse(`"${partial}"`) } catch {
+    return partial.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+  }
+}
+
 function Step2interview({ interviewData, user }) {
 const navigate = useNavigate()
   // ── State ──
@@ -16,6 +37,7 @@ const navigate = useNavigate()
   const [answer, setAnswer] = useState("");
   const [speechSupported, setSpeechSupported] = useState(false)
   const [feedback, setFeedback] = useState(null);
+  const [streamingFeedback, setStreamingFeedback] = useState("");
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(interviewData.question.timer || 60);
   const [timerActive, setTimerActive] = useState(true); // paused once the answer is submitted
@@ -40,6 +62,9 @@ const navigate = useNavigate()
   const answerStartedAtRef = useRef(null);
   const transcriptTimesRef = useRef([]);
   const lastSpeechResultRef = useRef('');
+  const streamControllerRef = useRef(null);
+  const streamBufferRef = useRef("");
+  const streamIdempotencyKeyRef = useRef(null);
 
 
   const videoSource = voiceGender === "female" ? femaleVideo : maleVideo
@@ -239,6 +264,31 @@ const navigate = useNavigate()
     lastSpeechResultRef.current = ''
   }
 
+  const requestStreamedFeedback = async (payload) => {
+    if (streamControllerRef.current) throw new Error("Feedback is already streaming")
+    const controller = new AbortController()
+    streamControllerRef.current = controller
+    streamBufferRef.current = ""
+    streamIdempotencyKeyRef.current ||= globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    setStreamingFeedback("Waiting for feedback…")
+    try {
+      const result = await submitAnswerStream({ ...payload, idempotencyKey: streamIdempotencyKeyRef.current }, {
+        signal: controller.signal,
+        onToken: (token) => {
+          streamBufferRef.current += token
+          const field = interviewData.type === "behavioral" ? "improvedAnswer" : "feedback"
+          const partial = partialJsonStringField(streamBufferRef.current, field)
+          setStreamingFeedback(partial ?? streamBufferRef.current.slice(-600))
+        },
+      })
+      setStreamingFeedback("")
+      streamIdempotencyKeyRef.current = null
+      return result
+    } finally {
+      if (streamControllerRef.current === controller) streamControllerRef.current = null
+    }
+  }
+
   useEffect(()=>{
     if(timeLeft !== 0)return;
     const autoSubmit = async () => {
@@ -248,11 +298,19 @@ const navigate = useNavigate()
 
       setLoading(true)
 
-    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer:finalAnswer, deliveryMetrics })
+    let streamError = ""
+    const res = await requestStreamedFeedback({ interviewId: interviewData.interviewId, answer:finalAnswer, deliveryMetrics }).catch((error) => {
+      setStreamingFeedback("");
+      if (error.name !== "AbortError") {
+        streamError = error.message
+        if (/refunded/i.test(error.message)) streamIdempotencyKeyRef.current = null
+      }
+      return null;
+    })
 
     if(!res){
       setLoading(false);
-      alert("Unable to submit your answer right now. Please try again.");
+      if (streamError) alert(streamError);
       setTimerActive(true);
       return;
     }
@@ -279,6 +337,8 @@ const navigate = useNavigate()
       setQuestion(res.question);
       setCurrentIndex(res.currentQuestion);
       setAnswer("");
+      setStreamingFeedback("");
+      streamIdempotencyKeyRef.current = null
       resetDeliveryTiming()
       setFeedback(null);
 
@@ -294,17 +354,25 @@ const navigate = useNavigate()
 
   const submit =async ()=>{
 
-    if(!answer.trim())return;
+    if(loading || !answer.trim())return;
 
     setTimerActive(false)
     setLoading(true)
 
-    const res = await submitAnswer({ interviewId: interviewData.interviewId, answer, deliveryMetrics: getDeliveryMetrics(answer) })
+    let streamError = ""
+    const res = await requestStreamedFeedback({ interviewId: interviewData.interviewId, answer, deliveryMetrics: getDeliveryMetrics(answer) }).catch((error) => {
+      setStreamingFeedback("");
+      if (error.name !== "AbortError") {
+        streamError = error.message
+        if (/refunded/i.test(error.message)) streamIdempotencyKeyRef.current = null
+      }
+      return null;
+    })
 
     if(!res){
       setLoading(false);
       setTimerActive(true);
-      alert("Unable to submit your answer right now. Please try again.");
+      if (streamError) alert(streamError);
       return;
     }
 
@@ -330,6 +398,8 @@ const navigate = useNavigate()
       setQuestion(res.question);
       setCurrentIndex(res.currentQuestion);
       setAnswer("");
+      setStreamingFeedback("");
+      streamIdempotencyKeyRef.current = null
       resetDeliveryTiming()
       setFeedback(null);
 
@@ -337,6 +407,7 @@ const navigate = useNavigate()
 
   useEffect(() => {
     return () => {
+      streamControllerRef.current?.abort()
       window.speechSynthesis?.cancel()
       recognitionRef.current?.stop()
       streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -539,6 +610,7 @@ const navigate = useNavigate()
             <textarea
             onChange={(e)=>recordTypedAnswer(e.target.value)}
             value={answer}
+            disabled={loading}
             rows={5}
             onKeyDown={(e)=>{if(e.ctrlKey && e.key === "Enter") submit()}}
             placeholder={speechSupported ? 'Write your answer here… or speak if mic is on' : 'Speech input is unavailable in this browser — type your answer here.'}
@@ -547,17 +619,17 @@ const navigate = useNavigate()
 
           <div className='mt-3 min-h-[0px]'>
             <AnimatePresence>
-            {feedback && (
+            {(feedback || streamingFeedback || loading) && (
                 <motion.div
                 initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 ,y:6}}
                 className='rounded-xl border border-green-500/20 bg-green-500/5 p-4 max-h-40 overflow-y-auto'>
-                  <p className='text-xs uppercase tracking-widest text-green-400 mb-2'>AI Feedback</p>
-                  {feedback.starScore ? <div className="mb-2 grid grid-cols-4 gap-2">{Object.entries(feedback.starScore).map(([key, value]) => <div key={key} className="rounded-lg bg-white/5 p-2"><span className="block text-[10px] capitalize text-white/40">{key}</span><strong>{value}/5</strong></div>)}</div> : null}
-                  <p className='text-sm text-zinc-300 leading-6'>{feedback.feedback || `${feedback.clarity != null ? `Clarity ${feedback.clarity}/100. ` : ''}${feedback.confidence != null ? `Confidence ${feedback.confidence}/100. ` : ''}`}</p>
-                  {feedback.improvedAnswer && <div className="mt-3 rounded-lg bg-white/5 p-3"><p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">STAR rewrite</p><p className="whitespace-pre-wrap text-sm text-white/75">{feedback.improvedAnswer}</p></div>}
-                  {feedback.nextSteps?.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-white/50">{feedback.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>}
+                  <p className='text-xs uppercase tracking-widest text-green-400 mb-2'>AI Feedback{loading ? ' · live' : ''}</p>
+                  {feedback?.starScore ? <div className="mb-2 grid grid-cols-4 gap-2">{Object.entries(feedback.starScore).map(([key, value]) => <div key={key} className="rounded-lg bg-white/5 p-2"><span className="block text-[10px] capitalize text-white/40">{key}</span><strong>{value}/5</strong></div>)}</div> : null}
+                  <p aria-live="polite" className='whitespace-pre-wrap text-sm text-zinc-300 leading-6'>{feedback?.feedback || feedback?.improvedAnswer || streamingFeedback || (loading ? "Waiting for the first feedback token…" : "")}</p>
+                  {feedback?.improvedAnswer && <div className="mt-3 rounded-lg bg-white/5 p-3"><p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">STAR rewrite</p><p className="whitespace-pre-wrap text-sm text-white/75">{feedback.improvedAnswer}</p></div>}
+                  {feedback?.nextSteps?.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-white/50">{feedback.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>}
 
                 </motion.div>)}
             </AnimatePresence>

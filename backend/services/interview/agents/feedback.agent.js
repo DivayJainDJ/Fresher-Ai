@@ -1,7 +1,7 @@
 import llm from "../config/llm.js";
 import feedbackPrompt from "../prompts/feedbackPrompt.js";
-import { cleanJson, invokeWithRetry } from "../../../shared/utils/cleanJson.js";
 import behavioralFeedbackPrompt from "../prompts/behavioralFeedbackPrompt.js";
+import { cleanJson, invokeWithRetry, streamWithRetry } from "../../../shared/utils/cleanJson.js";
 import { z } from "zod";
 
 const behavioralFeedbackSchema = z.object({
@@ -15,10 +15,9 @@ const behavioralFeedbackSchema = z.object({
     nextSteps: z.array(z.string().min(1).max(300)).min(2).max(4),
 }).strict();
 
-export const feedbackAgent = async (data) => {
+const parseFeedback = (data, content) => {
     if (data.type?.toLowerCase() === "behavioral") {
-        const response = await invokeWithRetry(llm, behavioralFeedbackPrompt(data), 3, { skipCache: true });
-        const feedback = behavioralFeedbackSchema.parse(JSON.parse(cleanJson(response.content)));
+        const feedback = behavioralFeedbackSchema.parse(JSON.parse(cleanJson(content)));
         if (data.answer.trim().split(/\s+/).length <= 5 && feedback.starScore.result > 1) {
             feedback.starScore.result = 1;
             if (!feedback.nextSteps.some((step) => /result|outcome|impact/i.test(step))) {
@@ -41,14 +40,66 @@ export const feedbackAgent = async (data) => {
         }
         return feedback;
     }
-    const response = await invokeWithRetry(llm, feedbackPrompt(data), 3, { skipCache: true })
-    const feedback = JSON.parse(cleanJson(response.content))
-    const metrics = data.deliveryMetrics
+    const feedback = JSON.parse(cleanJson(content));
+    const metrics = data.deliveryMetrics;
     if (metrics) {
-        const delivery = `Delivery: ${metrics.wordsPerMinute} words per minute, ${metrics.fillerCount} filler words, longest pause ${Math.round(metrics.longestPauseMs / 1000)} seconds.`
-        feedback.feedback = `${feedback.feedback || ""} ${delivery}`.trim()
-        if (metrics.fillerCount >= 3) feedback.improvements = [...(feedback.improvements || []), "Replace filler words with brief pauses."].slice(0, 3)
-        else if (metrics.wordsPerMinute > 170) feedback.improvements = [...(feedback.improvements || []), "Slow down slightly between key points."].slice(0, 3)
+        const delivery = `Delivery: ${metrics.wordsPerMinute} words per minute, ${metrics.fillerCount} filler words, longest pause ${Math.round(metrics.longestPauseMs / 1000)} seconds.`;
+        feedback.feedback = `${feedback.feedback || ""} ${delivery}`.trim();
+        if (metrics.fillerCount >= 3) feedback.improvements = [...(feedback.improvements || []), "Replace filler words with brief pauses."].slice(0, 3);
+        else if (metrics.wordsPerMinute > 170) feedback.improvements = [...(feedback.improvements || []), "Slow down slightly between key points."].slice(0, 3);
     }
-    return feedback
-}
+    return feedback;
+};
+
+export const feedbackMessages = (data) => data.type?.toLowerCase() === "behavioral"
+    ? behavioralFeedbackPrompt(data)
+    : feedbackPrompt(data);
+
+export const feedbackAgent = async (data) => {
+    const response = await invokeWithRetry(llm, feedbackMessages(data), 3, { skipCache: true });
+    return parseFeedback(data, response.content);
+};
+
+const extractPartialString = (raw, field) => {
+    const key = raw.indexOf(`"${field}"`);
+    if (key < 0) return null;
+    const colon = raw.indexOf(":", key);
+    if (colon < 0) return null;
+    const start = raw.indexOf('"', colon + 1);
+    if (start < 0) return null;
+    let escaped = false;
+    for (let index = start + 1; index < raw.length; index += 1) {
+        if (escaped) { escaped = false; continue; }
+        if (raw[index] === "\\") { escaped = true; continue; }
+        if (raw[index] === '"') {
+            try { return JSON.parse(raw.slice(start, index + 1)); } catch { return raw.slice(start + 1, index); }
+        }
+    }
+    const partial = raw.slice(start + 1);
+    try { return JSON.parse(`"${partial}"`); } catch {
+        return partial.replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    }
+};
+
+export const streamFeedbackAgent = async (data, onToken, { signal } = {}) => {
+    const field = data.type?.toLowerCase() === "behavioral" ? "improvedAnswer" : "feedback";
+    let raw = "";
+    let streamedText = "";
+    const response = await streamWithRetry(llm, feedbackMessages(data), async (token) => {
+        raw += token;
+        const partial = extractPartialString(raw, field);
+        if (partial == null || !partial.startsWith(streamedText)) return false;
+        const next = partial.slice(streamedText.length);
+        if (!next) return false;
+        streamedText = partial;
+        await onToken(next);
+        return true;
+    }, {
+        signal,
+        validateContent: (content) => parseFeedback(data, content),
+    });
+    const feedback = parseFeedback(data, response.content);
+    const finalText = data.type?.toLowerCase() === "behavioral" ? feedback.improvedAnswer : feedback.feedback;
+    if (!streamedText && finalText) await onToken(finalText);
+    return { feedback, content: response.content, cached: response.cached };
+};

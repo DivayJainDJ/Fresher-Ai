@@ -35,9 +35,9 @@ export const chargeCoins = (action) => async (req, res, next) => {
         const userId = req.user?.userId || req.headers["x-user-id"];
         const cost = getCoinCost(action);
         if (!cost) return res.status(400).json({ success: false, message: "Invalid coin action" });
-        const requestedKey = action === "code-review" ? req.validatedCodeReview?.idempotencyKey : action === "behavioral-session" ? req.body?.idempotencyKey : null;
-        if (action === "behavioral-session" && (!requestedKey || !/^[a-zA-Z0-9:_-]{8,128}$/.test(requestedKey))) {
-            return res.status(400).json({ success: false, message: "Behavioral session requires a valid idempotencyKey" });
+        const requestedKey = action === "code-review" ? req.validatedCodeReview?.idempotencyKey : action === "behavioral-session" || action === "interview-feedback" ? req.body?.idempotencyKey : null;
+        if ((action === "behavioral-session" && (!requestedKey || !/^[a-zA-Z0-9:_-]{8,128}$/.test(requestedKey))) || (action === "interview-feedback" && requestedKey && !/^[a-zA-Z0-9:_-]{8,128}$/.test(requestedKey))) {
+            return res.status(400).json({ success: false, message: "A valid idempotencyKey is required" });
         }
         const eventKey = requestedKey ? `spend:${action}:${userId}:${requestedKey}` : `spend:${crypto.randomUUID()}`;
         const user = await spendCoinsWithLedger({ User, Ledger: CreditLedger, userId, action, eventKey });

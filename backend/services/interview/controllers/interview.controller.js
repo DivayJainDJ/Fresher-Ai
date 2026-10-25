@@ -1,10 +1,14 @@
 import redis from "../../../shared/redis/redis.js";
+import crypto from "node:crypto";
 import graph from "../graph/graph.js";
 import Interview from "../models/interview.model.js";
 import { refundCoins, chargeCoins } from "../middleware/isAuth.js";
 import { z } from "zod";
 import { publishSafely } from "../../../shared/events/bus.js";
 import BehavioralQuestion, { BEHAVIORAL_CATEGORIES } from "../models/behavioralQuestion.model.js";
+import { streamFeedbackAgent } from "../agents/feedback.agent.js";
+import { summaryAgent } from "../agents/summary.agent.js";
+import { recordLlmTimingSample } from "../../../shared/utils/llmMetrics.js";
 
 const startInterviewSchema = z.object({
     type: z.enum(["technical", "hr", "behavioral"]),
@@ -118,7 +122,230 @@ export const startInterview = async (req, res) => {
 }
 
 
+
+const streamAnswerSchema = answerSchema.extend({
+    idempotencyKey: z.string().regex(/^[a-zA-Z0-9:_-]{8,128}$/).optional(),
+}).strict();
+
+const streamEvent = (res, event, data) => {
+    if (res.destroyed || res.writableEnded) return false;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    return true;
+};
+
+const streamAnswerFeedbackHandler = async (req, res) => {
+    const streamStartedAt = Date.now();
+    req.sseTokenProduced = false;
+    req.sseRefunded = false;
+    const parsed = streamAnswerSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, message: "Interview ID and answer are required" });
+
+    const userId = req.user?.userId || req.headers["x-user-id"];
+    const { interviewId, answer, deliveryMetrics } = parsed.data;
+    const interview = await Interview.findOne({ _id: interviewId, userId });
+    if (!interview) return res.status(404).json({ success: false, message: "Interview not found" });
+    if (interview.status === "completed") return res.status(400).json({ success: false, message: "Interview already completed" });
+
+    const index = interview.currentQuestion;
+    const currentQuestion = interview.questions[index];
+    if (!currentQuestion) return res.status(400).json({ success: false, message: "Invalid question index" });
+
+    const isBehavioral = interview.type === "behavioral";
+    if (!isBehavioral) {
+        await new Promise((resolve, reject) => chargeCoins("interview-feedback")(req, res, (error) => error ? reject(error) : resolve()));
+        if (res.headersSent) return;
+        if (!req.coinCharge) return res.status(500).json({ success: false, message: "Interview feedback charge was not applied" });
+    }
+    if (req.sseAbortController.signal.aborted) {
+        if (req.coinCharge && !req.sseRefunded) {
+            req.sseRefunded = true;
+            await refundCoins(req);
+        }
+        return;
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Content-Encoding", "identity");
+    res.flushHeaders?.();
+
+    const abortController = req.sseAbortController;
+    let tokenProduced = false;
+    const heartbeat = setInterval(() => {
+        if (!res.destroyed && !res.writableEnded) res.write(": heartbeat\n\n");
+    }, 15_000);
+
+    try {
+        const feedbackResult = await streamFeedbackAgent({
+            question: currentQuestion.question,
+            answer,
+            difficulty: currentQuestion.difficulty,
+            type: interview.type,
+            category: currentQuestion.category,
+            deliveryMetrics: deliveryMetrics || currentQuestion.deliveryMetrics,
+        }, async (token) => {
+            if (!tokenProduced) {
+                tokenProduced = true;
+                req.sseTokenProduced = true;
+                if (!streamEvent(res, "token", { token })) throw new Error("Client disconnected");
+                void recordLlmTimingSample("streamTimeToFirstToken", Date.now() - streamStartedAt);
+                return;
+            }
+            if (!streamEvent(res, "token", { token })) throw new Error("Client disconnected");
+        }, { signal: abortController.signal });
+
+        currentQuestion.userAnswer = answer;
+        if (deliveryMetrics) currentQuestion.deliveryMetrics = deliveryMetrics;
+        if (parsed.data.idempotencyKey) currentQuestion.feedbackRequestKey = parsed.data.idempotencyKey;
+        currentQuestion.feedback = feedbackResult.feedback;
+        interview.currentQuestion += 1;
+        const completed = interview.currentQuestion >= interview.questions.length;
+        let responseData;
+
+        if (completed) {
+            const report = await summaryAgent({ role: interview.role, type: interview.type, questions: interview.questions }, { signal: abortController.signal });
+            interview.status = "completed";
+            interview.overallScore = report.overallScore;
+            interview.summary = report.summary;
+            interview.strengths = report.strengths;
+            interview.weaknesses = report.weaknesses;
+            interview.recommendations = report.recommendations;
+            await interview.save();
+            await redis.del(`interviews:${userId}`);
+            await publishSafely(isBehavioral ? "behavioral.completed" : "interview.completed", {
+                eventId: `${isBehavioral ? "behavioral.completed" : "interview.completed"}:${interview._id}`,
+                userId: String(userId),
+                module: isBehavioral ? "behavioral" : "interview",
+                result: { score: interview.overallScore, weakTopics: interview.weaknesses, interviewId: String(interview._id), role: interview.role },
+            }, { service: "interview", requestId: req.requestId || req.headers["x-request-id"] });
+            responseData = { success: true, completed: true, interview, feedback: feedbackResult.feedback };
+        } else {
+            await interview.save();
+            await redis.del(`interviews:${userId}`);
+            responseData = {
+                success: true,
+                completed: false,
+                currentQuestion: interview.currentQuestion,
+                question: interview.questions[interview.currentQuestion],
+                feedback: feedbackResult.feedback,
+            };
+        }
+        void recordLlmTimingSample("streamFullResponse", Date.now() - streamStartedAt);
+        if (parsed.data.idempotencyKey) {
+            try {
+                await redis.set(`stream-feedback:result:${userId}:${parsed.data.idempotencyKey}`, JSON.stringify({ content: feedbackResult.content, result: responseData }), "EX", 6 * 60 * 60);
+            } catch (error) {
+                console.warn("stream feedback idempotency cache write failed", error.message);
+            }
+        }
+        streamEvent(res, "done", responseData);
+        res.end();
+    } catch (error) {
+        if (!tokenProduced && req.coinCharge && !req.sseRefunded) {
+            req.sseRefunded = true;
+            await refundCoins(req).catch((refundError) => console.error("stream feedback refund failed", refundError));
+        }
+        if (!abortController.signal.aborted && !res.destroyed && !res.writableEnded) {
+            const message = tokenProduced
+                ? "Feedback stream stopped before completion"
+                : req.coinCharge ? "Feedback could not be generated. Your coins were refunded." : "Feedback could not be generated. Please try again.";
+            streamEvent(res, "error", { message });
+            res.end();
+        }
+        if (!abortController.signal.aborted) console.error("interview feedback stream failed", error);
+    } finally {
+        clearInterval(heartbeat);
+    }
+};
+
+export const streamAnswerFeedback = async (req, res) => {
+    let lockKey;
+    let lockToken;
+    const abortController = new AbortController();
+    const abortOnDisconnect = () => {
+        if (!res.writableEnded && !abortController.signal.aborted) abortController.abort(new Error("Client disconnected"));
+    };
+    req.sseAbortController = abortController;
+    req.once("aborted", abortOnDisconnect);
+    res.once("close", abortOnDisconnect);
+    try {
+        const parsed = streamAnswerSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ success: false, message: "Interview ID and answer are required" });
+        const userId = req.user?.userId || req.headers["x-user-id"];
+        const idempotencyKey = parsed.data.idempotencyKey;
+        if (idempotencyKey) {
+            const resultKey = `stream-feedback:result:${userId}:${idempotencyKey}`;
+            const cached = await redis.get(resultKey);
+            if (!cached && !abortController.signal.aborted) {
+                const savedInterview = await Interview.findOne({ userId, "questions.feedbackRequestKey": idempotencyKey });
+                const savedQuestion = savedInterview?.questions.find((item) => item.feedbackRequestKey === idempotencyKey);
+                if (savedQuestion) {
+                    const result = savedInterview.status === "completed"
+                        ? { success: true, completed: true, interview: savedInterview, feedback: savedQuestion.feedback }
+                        : { success: true, completed: false, currentQuestion: savedInterview.currentQuestion, question: savedInterview.questions[savedInterview.currentQuestion], feedback: savedQuestion.feedback };
+                    res.status(200);
+                    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+                    res.setHeader("Cache-Control", "no-cache, no-transform");
+                    res.setHeader("Connection", "keep-alive");
+                    res.setHeader("X-Accel-Buffering", "no");
+                    res.setHeader("Content-Encoding", "identity");
+                    res.flushHeaders?.();
+                    streamEvent(res, "token", { token: JSON.stringify(savedQuestion.feedback) });
+                    streamEvent(res, "done", result);
+                    return res.end();
+                }
+            }
+            if (cached && !abortController.signal.aborted) {
+                const { content, result } = JSON.parse(cached);
+                res.status(200);
+                res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+                res.setHeader("Cache-Control", "no-cache, no-transform");
+                res.setHeader("Connection", "keep-alive");
+                res.setHeader("X-Accel-Buffering", "no");
+                res.setHeader("Content-Encoding", "identity");
+                res.flushHeaders?.();
+                streamEvent(res, "token", { token: content });
+                streamEvent(res, "done", result);
+                return res.end();
+            }
+            lockKey = `stream-feedback:lock:${userId}:${idempotencyKey}`;
+            lockToken = crypto.randomUUID();
+            const acquired = await redis.set(lockKey, lockToken, "EX", 180, "NX");
+            if (!acquired) return res.status(409).json({ success: false, message: "This feedback request is already processing. Retry with the same request." });
+        }
+        return await streamAnswerFeedbackHandler(req, res);
+    } catch (error) {
+        if (!req.sseTokenProduced && req.coinCharge && !req.sseRefunded) {
+            req.sseRefunded = true;
+            await refundCoins(req).catch((refundError) => console.error("stream feedback refund failed", refundError));
+        }
+        if (!res.headersSent) return res.status(500).json({ success: false, message: "Unable to start feedback stream" });
+        if (!res.destroyed && !res.writableEnded) {
+            try {
+                streamEvent(res, "error", { message: "Feedback stream failed" });
+                res.end();
+            } catch { /* The client has already disconnected. */ }
+        }
+        console.error("interview feedback stream setup failed", error);
+    } finally {
+        req.removeListener("aborted", abortOnDisconnect);
+        res.removeListener("close", abortOnDisconnect);
+        delete req.sseAbortController;
+        if (lockKey && lockToken) {
+            try {
+                await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end", 1, lockKey, lockToken);
+            } catch (error) {
+                console.error("stream feedback lock release failed", error.message);
+            }
+        }
+    }
+};
+
 export const submitAnswer = async (req, res) => {
+    const requestStartedAt = Date.now();
     try {
         const userId = req.user?.userId || req.headers["x-user-id"]
         const parsed = answerSchema.safeParse(req.body);
@@ -235,6 +462,7 @@ export const submitAnswer = async (req, res) => {
                 },
             }, { service: "interview", requestId: req.requestId || req.headers["x-request-id"] });
 
+            void recordLlmTimingSample("nonStreamingFullResponse", Date.now() - requestStartedAt);
             return res.status(200).json({
 
                 success: true,
@@ -254,6 +482,7 @@ export const submitAnswer = async (req, res) => {
 
         await redis.del(`interviews:${userId}`)
 
+        void recordLlmTimingSample("nonStreamingFullResponse", Date.now() - requestStartedAt);
         return res.status(200).json({
 
             success: true,
