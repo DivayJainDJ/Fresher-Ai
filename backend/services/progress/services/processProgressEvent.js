@@ -30,7 +30,7 @@ const extractWeakTopics = (result) => {
   return [...new Set(values)].slice(0, 30);
 };
 
-export const processProgressEvent = async (rawEvent, { EventModel = ProgressEvent, ProgressModel = UserProgress, sessionFactory = () => mongoose.startSession(), now = () => new Date() } = {}) => {
+export const processProgressEvent = async (rawEvent, { EventModel = ProgressEvent, ProgressModel = UserProgress, sessionFactory = () => mongoose.startSession(), now = () => new Date(), redisClient = redis } = {}) => {
   const event = progressEventSchema.parse(rawEvent);
   if (!mongoose.isValidObjectId(event.userId)) throw new TypeError("Progress event userId must be a Mongo ObjectId");
   const occurredAt = new Date(event.timestamp);
@@ -52,7 +52,7 @@ export const processProgressEvent = async (rawEvent, { EventModel = ProgressEven
       const timezone = event.timezone || previous?.timezone || "UTC";
       activityTimezone = timezone;
       const today = dayKey(occurredAt, timezone);
-      const redisActivityDay = await redis.get(`progress:activity-day:${event.userId}`).catch(() => null);
+      const redisActivityDay = await redisClient.get(`progress:activity-day:${event.userId}`).catch(() => null);
       const yesterdayDate = new Date(`${today}T00:00:00.000Z`);
       yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
       const yesterday = dayKey(yesterdayDate);
@@ -87,7 +87,7 @@ export const processProgressEvent = async (rawEvent, { EventModel = ProgressEven
       }], { session });
     });
     if (!result.duplicate) {
-      await redis.set(`progress:activity-day:${event.userId}`, dayKey(occurredAt, activityTimezone), "EX", 60 * 24 * 60 * 60).catch(() => {});
+      await redisClient.set(`progress:activity-day:${event.userId}`, dayKey(occurredAt, activityTimezone), "EX", 60 * 24 * 60 * 60).catch(() => {});
     }
     if (!result.duplicate && ["quiz.completed", "sql.completed"].includes(event.type)) {
       try {
@@ -98,9 +98,9 @@ export const processProgressEvent = async (rawEvent, { EventModel = ProgressEven
           const weekStart = new Date(`${date}T00:00:00.000Z`);
           weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
           const weekKey = weekStart.toISOString().slice(0, 10);
-          await redis.zincrby("leaderboard:all-time", points, String(event.userId));
-          await redis.zincrby(`leaderboard:week:${weekKey}`, points, String(event.userId));
-          await redis.expire(`leaderboard:week:${weekKey}`, 8 * 24 * 60 * 60);
+          await redisClient.zincrby("leaderboard:all-time", points, String(event.userId));
+          await redisClient.zincrby(`leaderboard:week:${weekKey}`, points, String(event.userId));
+          await redisClient.expire(`leaderboard:week:${weekKey}`, 8 * 24 * 60 * 60);
         }
       } catch (error) { console.error(JSON.stringify({ service: "progress", event: "leaderboard_update_failed", error: error.message })); }
     }

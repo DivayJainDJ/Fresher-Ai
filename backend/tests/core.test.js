@@ -262,7 +262,8 @@ test("progress event replay creates one progress event and increments once", asy
   const sessionFactory = async () => ({ withTransaction: async (work) => work(), endSession: async () => {} });
   const { processProgressEvent } = await import("../services/progress/services/processProgressEvent.js");
   const event = { eventId: "interview:1", type: "interview.completed", userId: "507f1f77bcf86cd799439011", timestamp: "2026-10-24T12:00:00.000Z", module: "interview", result: { score: 80, weakTopics: ["SQL joins"] } };
-  const options = { EventModel, ProgressModel, sessionFactory, now: () => new Date("2026-10-24T12:00:01.000Z") };
+  const redisClient = { get: async () => null, set: async () => "OK", zincrby: async () => 1, expire: async () => 1 };
+  const options = { EventModel, ProgressModel, sessionFactory, redisClient, now: () => new Date("2026-10-24T12:00:01.000Z") };
   assert.equal((await processProgressEvent(event, options)).duplicate, false);
   assert.equal((await processProgressEvent(event, options)).duplicate, true);
   assert.equal(state.events.size, 1);
