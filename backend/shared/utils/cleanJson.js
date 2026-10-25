@@ -1,74 +1,15 @@
 import crypto from "crypto";
-import redis from "../redis/redis.js";
+import { isBreakerOpen, recordBreakerFailure, resetBreaker, resetCircuit } from "./circuitBreaker.js";
+import { incrementLlmMetric, readLlmMetrics, recordFailoverLatency, recordProviderLatency } from "./llmMetrics.js";
+export { resetCircuit } from "./circuitBreaker.js";
 
-export function cleanJson(raw) {
-    return String(raw)
-        .replace(/<think>[\s\S]*?<\/think>/gi, "")
-        .replace(/<think>[\s\S]*/gi, "")
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
-}
+export { cleanJson } from "./json.js";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* ============================================================
-   PER-PROVIDER CIRCUIT BREAKERS
-   Each provider (groq / gemini / cerebras) gets its own breaker
-   so one dead/rate-limited provider doesn't block the others.
-   ============================================================ */
-const breakers = {};
-
-function getBreaker(name) {
-    if (!breakers[name]) {
-        breakers[name] = {
-            failures: 0,
-            lastFailure: 0,
-            isOpen: false,
-            threshold: 4,
-            cooldownMs: 90_000,
-        };
-    }
-    return breakers[name];
-}
-
-function isBreakerOpen(name) {
-    const b = getBreaker(name);
-    if (!b.isOpen) return false;
-
-    const elapsed = Date.now() - b.lastFailure;
-    if (elapsed >= b.cooldownMs) {
-        b.isOpen = false;
-        b.failures = 0;
-        console.log(`[CircuitBreaker:${name}] HALF-OPEN – allowing probe request`);
-        return false;
-    }
-    return true;
-}
-
-function recordBreakerFailure(name) {
-    const b = getBreaker(name);
-    b.failures++;
-    b.lastFailure = Date.now();
-    if (b.failures >= b.threshold) {
-        b.isOpen = true;
-        console.error(
-            `[CircuitBreaker:${name}] OPEN – ${b.failures} consecutive failures. ` +
-            `Cooling down for ${b.cooldownMs / 1000}s.`
-        );
-    }
-}
-
-function resetBreaker(name) {
-    const b = getBreaker(name);
-    b.failures = 0;
-    b.isOpen = false;
-}
-
-// Kept for backwards compatibility with any existing imports.
-export function resetCircuit() {
-    Object.keys(breakers).forEach(resetBreaker);
-}
+const metrics = { cacheHits: 0, cacheMisses: 0, retries: 0, breakerOpens: 0, providerSuccess: {}, failovers: 0, providerLatencyMs: {}, failoverLatencyMs: { count: 0, totalMs: 0, maxMs: 0 } };
+export const getLlmMetrics = () => JSON.parse(JSON.stringify(metrics));
+export const getSharedLlmMetrics = () => readLlmMetrics();
 
 /* ============================================================
    RESPONSE CACHE (Redis)
@@ -87,8 +28,15 @@ function hashMessages(messages) {
     return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 }
 
+let redisClient;
+const getRedis = async () => {
+    if (!redisClient) redisClient = (await import("../redis/redis.js")).default;
+    return redisClient;
+};
+
 async function getCached(key) {
     try {
+        const redis = await getRedis();
         const val = await redis.get(`llmcache:${key}`);
         return val ? JSON.parse(val) : null;
     } catch (error) {
@@ -99,6 +47,7 @@ async function getCached(key) {
 
 async function setCached(key, content) {
     try {
+        const redis = await getRedis();
         await redis.set(`llmcache:${key}`, JSON.stringify(content), "EX", CACHE_TTL_SECONDS);
     } catch (error) {
         console.warn("[LLM cache] write failed:", error.message);
@@ -238,37 +187,69 @@ function retryDelayMs(error, attempt) {
  * (Groq) langchain instance already built per-service — unchanged
  * call sites keep working exactly as before.
  */
-export async function invokeWithRetry(llm, messages, maxAttempts = 3) {
+const defaultCache = { get: getCached, set: setCached };
+const defaultMetrics = { increment: incrementLlmMetric, providerLatency: recordProviderLatency, failoverLatency: recordFailoverLatency };
+
+export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCache = false, providers, cache = defaultCache, metricsSink = defaultMetrics } = {}) {
     const cacheKey = hashMessages(messages);
-    const cached = await getCached(cacheKey);
+    const cached = skipCache ? null : await cache.get(cacheKey);
     if (cached) {
+        metrics.cacheHits += 1;
+        await metricsSink.increment("cacheHits");
         return { content: cached };
     }
+    if (!skipCache) { metrics.cacheMisses += 1; await metricsSink.increment("cacheMisses"); }
 
-    const chain = buildProviderChain(llm, {
+    const chain = providers || buildProviderChain(llm, {
         maxTokens: llm?.maxTokens,
         temperature: llm?.temperature,
     });
 
     let lastError;
 
+    let previousProviderFailed = false;
+    let firstFailureAt = 0;
     for (const provider of chain) {
         if (isBreakerOpen(provider.name)) {
             console.warn(`[LLM] Skipping ${provider.name} – circuit open (cooling down)`);
+            if (!firstFailureAt) firstFailureAt = Date.now();
+            previousProviderFailed = true;
             continue;
         }
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
+                const startedAt = Date.now();
                 const content = await provider.call(messages);
+                const latency = metrics.providerLatencyMs[provider.name] || { count: 0, totalMs: 0, maxMs: 0 };
+                latency.count += 1;
+                latency.totalMs += Date.now() - startedAt;
+                latency.maxMs = Math.max(latency.maxMs, Date.now() - startedAt);
+                metrics.providerLatencyMs[provider.name] = latency;
+                await metricsSink.providerLatency(provider.name, Date.now() - startedAt);
                 resetBreaker(provider.name);
-                await setCached(cacheKey, content);
+                metrics.providerSuccess[provider.name] = (metrics.providerSuccess[provider.name] || 0) + 1;
+                await metricsSink.increment(`providerSuccess:${provider.name}`);
+                if (previousProviderFailed) {
+                    const failoverLatency = Date.now() - firstFailureAt;
+                    metrics.failovers += 1;
+                    metrics.failoverLatencyMs.count += 1;
+                    metrics.failoverLatencyMs.totalMs += failoverLatency;
+                    metrics.failoverLatencyMs.maxMs = Math.max(metrics.failoverLatencyMs.maxMs, failoverLatency);
+                    await metricsSink.increment("failovers");
+                    await metricsSink.failoverLatency(failoverLatency);
+                }
+                if (!skipCache) await cache.set(cacheKey, content);
                 return { content };
             } catch (error) {
                 lastError = error;
+                if (!firstFailureAt) firstFailureAt = Date.now();
+                previousProviderFailed = true;
                 const retryable = isRetryableError(error);
 
                 if (retryable && attempt < maxAttempts) {
+                    metrics.retries += 1;
+                    await metricsSink.increment("retries");
                     const waitMs = retryDelayMs(error, attempt);
                     console.warn(
                         `[LLM:${provider.name}] attempt ${attempt}/${maxAttempts} failed ` +
@@ -278,7 +259,7 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3) {
                     continue;
                 }
 
-                recordBreakerFailure(provider.name);
+                if (recordBreakerFailure(provider.name)) { metrics.breakerOpens += 1; await metricsSink.increment("breakerOpens"); }
                 console.warn(
                     `[LLM:${provider.name}] giving up after ${attempt} attempt(s): ${error.message}`
                 );

@@ -6,7 +6,6 @@ import api from "../utils/axios"
 import { useDispatch, useSelector } from 'react-redux'
 import { setResume } from '../redux/resumeSlice'
 import { PolarAngleAxis, RadialBar, RadialBarChart } from "recharts"
-import { shouldBlockOnCoinError, spendCoins } from '../apis/user.api'
 const ScoreRing = ({ score }) => {
     const color = score >= 75 ? "#7c3aed" : score >= 50 ? "#f59e0b" : "#ef4444";
     return (
@@ -88,25 +87,21 @@ function Scorer({ setUser }) {
         try {
             setLoading(true)
 
-            try {
-                const coinResponse = await spendCoins({ coins: 10, action: "resume-scorer" })
-                setUser((prev) => ({
-                    ...prev, interviewCoin: coinResponse?.interviewCoin,
-                }))
-            } catch (error) {
-                if (shouldBlockOnCoinError(error)) {
-                    setLoading(false)
-                    alert(error?.response?.data?.message || "Failed to use coins.")
-                    return;
-                }
-            }
-
             const formData = new FormData()
             formData.append("resume", file)
 
             const response = await api.post("/api/resume/upload", formData)
-
-            dispatch(setResume(response?.data?.data))
+            const chargedCoins = Number(response.headers["x-interview-coins"])
+            if (Number.isFinite(chargedCoins)) setUser((prev) => ({ ...prev, interviewCoin: chargedCoins }))
+            let job = { status: response.data.status || "queued" }
+            while (job.status === "queued" || job.status === "processing") {
+                await new Promise((resolve) => setTimeout(resolve, 1500))
+                const status = await api.get(`/api/resume/jobs/${response.data.jobId}`)
+                job = status.data.job
+            }
+            if (job.status !== "completed") throw new Error(job.message || "Resume analysis failed")
+            const result = await api.get("/api/resume/get-resume")
+            dispatch(setResume(result?.data?.data))
             setLoading(false)
 
 

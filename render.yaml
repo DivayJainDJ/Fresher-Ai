@@ -21,6 +21,12 @@ envVarGroups:
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b
+      - key: FRONTEND_URL
+        sync: false
 
 services:
   - type: web
@@ -32,10 +38,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: FRONTEND_URL
-        value: https://frontend-git-main-divayjain1208-gmailcoms-projects.vercel.app,https://frontend-fzo61o0bi-divayjain1208-gmailcoms-projects.vercel.app
-      - key: GROQ_MODEL
-        value: qwen/qwen3.8-27b
       - fromGroup: fresherai-backend
       - key: AUTH_SERVICE_URL
         fromService:
@@ -55,6 +57,11 @@ services:
       - key: ROADMAP_SERVICE_URL
         fromService:
           name: fresherai-roadmap
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: PROGRESS_SERVICE_URL
+        fromService:
+          name: fresherai-progress
           type: web
           envVarKey: RENDER_EXTERNAL_URL
       - key: BILLING_SERVICE_URL
@@ -83,8 +90,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GROQ_MODEL
-        value: qwen/qwen3.8-27b
       - fromGroup: fresherai-backend
 
   - type: web
@@ -96,8 +101,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GROQ_MODEL
-        value: qwen/qwen3.8-27b
       - fromGroup: fresherai-backend
 
   - type: web
@@ -109,8 +112,20 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: GROQ_MODEL
-        value: qwen/qwen3.8-27b
+      - fromGroup: fresherai-backend
+
+  - type: web
+    name: fresherai-progress
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/services/progress/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "6006"
       - fromGroup: fresherai-backend
 
   - type: web

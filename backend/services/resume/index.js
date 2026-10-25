@@ -1,12 +1,16 @@
+import { dependencyHealth } from "../../shared/utils/health.js"
+import { requestLogger } from "../../shared/middleware/requestLogger.js"
 import express from "express"
 import dotenv from "dotenv"
 import cors from "cors"
 import { connectDB } from "./config/db.js"
 import resumeRouter from "./routes/resume.route.js"
+import { startResumeQueue } from "./services/resumeJobs.js"
 
 dotenv.config()
 
 const app = express()
+app.use(requestLogger("resume"))
 
 app.use(express.json())
 
@@ -15,28 +19,11 @@ const allowedOrigins = (process.env.FRONTEND_URL || "")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-const isAllowedOrigin = (origin) => {
-    if (!origin) {
-        return true;
-    }
-
-    if (allowedOrigins.includes(origin)) {
-        return true;
-    }
-
-    try {
-        const { hostname } = new URL(origin);
-        return hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            hostname.endsWith(".vercel.app");
-    } catch {
-        return false;
-    }
-};
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
 
 app.use(cors({
     origin(origin, callback) {
-        if (allowedOrigins.length === 0 || isAllowedOrigin(origin)) {
+        if (isAllowedOrigin(origin)) {
             return callback(null, true);
         }
 
@@ -48,9 +35,7 @@ app.use(cors({
 
 const PORT = process.env.PORT || 6002
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "resume" });
-});
+app.get("/health", (_req, res) => dependencyHealth("resume", res));
 
 app.get("/", (_req, res) => {
     res.send("Hello from Resume-service");
@@ -61,6 +46,7 @@ app.use("/", resumeRouter);
 const startServer = async () => {
     try {
         await connectDB()
+        await startResumeQueue()
 
         const server = app.listen(PORT, "0.0.0.0", () => {
             console.log(`Resume-service Started on ${PORT}`);

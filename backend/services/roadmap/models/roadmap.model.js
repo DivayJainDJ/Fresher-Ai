@@ -31,6 +31,8 @@ const moduleSchema = new mongoose.Schema({
         type: String,
         default: "",
     },
+    practiced: { type: Boolean, default: false },
+    practicedAt: { type: Date, default: null },
 },
     {
         _id: false,
@@ -69,6 +71,8 @@ const roadmapSchema = new mongoose.Schema({
         type: [moduleSchema],
         default: [],
     },
+
+    practicedTopics: { type: [String], default: [] },
 
 }, { timestamps: true })
 

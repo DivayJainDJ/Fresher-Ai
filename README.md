@@ -18,15 +18,15 @@ FresherAI helps fresh graduates prepare for tech interviews with:
 ## Architecture
 
 ```
-React Frontend
-      ↓
-  API Gateway (Express)
-  ┌──────┬───────┬──────────┬─────────┐
-  ↓      ↓       ↓          ↓         ↓
- Auth  Resume  Interview  Roadmap  Billing
-                ↓
-         Groq + LangGraph
-         (AI Agent)
+React + Vite frontend
+        ↓
+Express API gateway ───── Redis (sessions, limits, cache, resume jobs, event stream)
+        ↓
+┌───────┼────────┬───────────┬─────────┬──────────┐
+Auth  Resume  Interview   Roadmap   Billing   Progress
+        └──────────┴───────────┴───────────┘
+              MongoDB
+        AI services → Groq
 ```
 
 **Services:**
@@ -39,6 +39,7 @@ React Frontend
 | Interview | 6003 | Mock interviews with LangGraph agent |
 | Roadmap | 6004 | Personalized learning paths |
 | Billing | 6005 | Credit system, Razorpay |
+| Progress | 6006 | Redis Stream event consumer, progress and streak aggregates |
 | Frontend | 5173 | React + Vite client |
 
 ---
@@ -72,6 +73,7 @@ Fresher-Ai/
 │       ├── resume/         # Resume upload & AI scoring
 │       ├── interview/      # Mock interview sessions
 │       ├── roadmap/        # Learning roadmap generation
+│       ├── progress/       # User activity aggregates and event lag
 │       └── billing/        # Credits & Razorpay
 ```
 
@@ -93,58 +95,68 @@ Fresher-Ai/
 git clone https://github.com/DivayJainDJ/Fresher-Ai.git
 cd Fresher-Ai
 
-# Install all service dependencies
-cd backend && npm install
-cd ../frontend && npm install
+# Install the root workspace dependencies
+npm ci
 ```
 
-### Environment Setup
+### Local Compose
+
+1. Copy `.env.example` to `.env`. The containers can start without third-party credentials; add Firebase credentials for login, Groq credentials for AI features, and Razorpay credentials for payments.
+2. Start the complete local stack:
 
 ```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
+cp .env.example .env
+docker compose up --build
 ```
 
-Required variables:
+Open the frontend at `http://localhost:5173`; the gateway listens at `http://localhost:8000`. Compose starts Redis and MongoDB locally. No monitoring ping is configured, so hosted Render services can sleep while idle.
 
-```env
-# Database
-MONGODB_URI=mongodb://localhost:27017/fresher
-REDIS_URL=redis://localhost:6379
+### CI checks
 
-# Auth
-FIREBASE_SERVICE_ACCOUNT=...
-
-# AI
-GROQ_API_KEY=...
-
-# Billing
-RAZORPAY_KEY_ID=...
-RAZORPAY_KEY_SECRET=...
-```
-
-### Run
-
-Start Redis and MongoDB, then:
+Run the same checks locally:
 
 ```bash
-# Backend services (each in separate terminal)
-cd backend
-node gateway/index.js
-node services/auth/index.js
-node services/resume/index.js
-node services/interview/index.js
-node services/roadmap/index.js
-node services/billing/index.js
-
-# Frontend
-cd frontend
-npm run dev
+npm ci
+npm test
+npm run build --workspace frontend
 ```
 
----
+GitHub Actions runs these checks and builds the backend images plus the frontend image on pushes and pull requests.
 
-## How It Works
+### Progress event bus
+
+Interview completion, resume scoring, and roadmap generation publish best-effort events into Redis Streams. The progress service consumes them with a durable consumer group, records each `eventId` once in MongoDB, updates per-user module totals/streaks/weak topics, and exposes `GET /api/progress/me`. Failed messages retry up to `EVENT_MAX_ATTEMPTS`, then move to `fresherai:events:dead`. The roadmap service consumes the same stream independently and marks matching weak interview topics as practiced.
+
+With Redis, MongoDB, and the progress service running, measure event lag at 100 publishes per second with:
+
+```bash
+npm run benchmark:lag --workspace=progress -- --rate=100 --count=1000
+```
+
+The command prints average, p50, p95, and maximum publish-to-process lag, then removes its synthetic Mongo records. This benchmark has not been run against a live Redis/Mongo deployment in this workspace.
+
+### Deployment settings
+
+Set `GROQ_MODEL` once in the shared Render environment group. The current model, `qwen/qwen3.8-27b`, is listed in Groq's [official model catalog](https://console.groq.com/docs/models) as a Preview model and has token pricing; check your Groq account's current quota and billing before enabling it. The Render blueprint asks for `FRONTEND_URL`; enter the exact comma-separated origins you control. Do not enter broad preview host patterns.
+
+Configure Razorpay's `payment.captured` webhook at `https://<gateway-host>/api/billing/webhook` and set the matching signing secret as `RAZORPAY_WEBHOOK_SECRET`.
+
+### Credits, provider fallback, and limits
+
+Credit purchases, feature spends, and refunds are recorded in the append-only `CreditLedger` collection. Payment order settlement and the corresponding coin/ledger writes use a MongoDB transaction, so MongoDB must support transactions (Atlas replica sets do; local Compose starts a single-node replica set). Credit costs remain server-owned in `backend/shared/utils/coinCosts.js`.
+
+The gateway supports both the existing Redis fixed-window limiter and an atomic Redis token-bucket middleware. LLM provider/cache/retry/failover counters and provider latency totals are stored in Redis and exposed through the protected `/metrics` endpoint. These counters are operational totals, not a benchmark: cache p95, saved tokens, live provider failover time, and sustained multi-instance 429 behavior still require a representative live workload to measure.
+
+### Results
+
+| Check | Result |
+|---|---:|
+| Node test cases | 16 passed |
+| Frontend production build | Passed |
+| Backend image builds | Configured in CI; not run locally |
+| Live deployment/demo | Not configured in this change |
+
+A real demo GIF and production link require a running deployed project and captured UI session; this repository copy does not include those assets.
 
 ### Resume Scoring
 1. User uploads PDF resume

@@ -1,3 +1,5 @@
+import { dependencyHealth } from "../../shared/utils/health.js"
+import { requestLogger } from "../../shared/middleware/requestLogger.js"
 import express from "express"
 import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
@@ -6,15 +8,14 @@ import interviewRouter from "./routes/interview.route.js"
 dotenv.config()
 
 const app = express()
+app.use(requestLogger("interview"))
 
 app.use(express.json())
 app.use(cookieParser())
 
 const PORT = process.env.PORT || 6003
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "interview" });
-});
+app.get("/health", (_req, res) => dependencyHealth("interview", res));
 
 app.get("/", (_req, res) => {
     res.send("Hello from Interview-service");

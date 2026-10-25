@@ -1,3 +1,5 @@
+import { dependencyHealth } from "../../shared/utils/health.js"
+import { requestLogger } from "../../shared/middleware/requestLogger.js"
 import express from "express"
 import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
@@ -6,14 +8,13 @@ import roadmapRouter from "./routes/roadmap.route.js"
 dotenv.config()
 
 const app = express()
+app.use(requestLogger("roadmap"))
 app.use(express.json())
 app.use(cookieParser())
 
 const PORT = process.env.PORT || 6004
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "roadmap" });
-});
+app.get("/health", (_req, res) => dependencyHealth("roadmap", res));
 
 app.use("/", roadmapRouter);
 

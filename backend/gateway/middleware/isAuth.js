@@ -1,4 +1,5 @@
 import redis from "../../shared/redis/redis.js"
+import User from "../../services/auth/model/user.model.js"
 
 export const isAuth = async (req, res, next) => {
     try {
@@ -21,15 +22,9 @@ export const isAuth = async (req, res, next) => {
         }
 
         const user = JSON.parse(session)
-
-        if (
-            typeof user.interviewCoin !== "number" ||
-            user.interviewCoin < 150
-        ) {
-            user.interviewCoin = 150
-        }
-
-        req.user = user
+        const currentUser = await User.findById(user.userId).select("interviewCoin name email")
+        if (!currentUser) return res.status(401).json({ message: "User not found" })
+        req.user = { ...user, interviewCoin: currentUser.interviewCoin, name: currentUser.name, email: currentUser.email }
 
         next()
 

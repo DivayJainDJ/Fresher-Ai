@@ -3,7 +3,6 @@ import { FiCheck, FiChevronDown, FiClock, FiFileText, FiSend, FiX, FiZap } from 
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { BsRocketTakeoff } from "react-icons/bs";
-import { shouldBlockOnCoinError, spendCoins } from '../apis/user.api'
 import api from '../utils/axios'
 import { useSelector } from 'react-redux'
 import RoadmapResult from '../components/roadmap/RoadmapResult'
@@ -63,19 +62,6 @@ function Roadmap({ setUser }) {
         setLoading(true);
         setError("");
         try {
-            try {
-                const coinResponse = await spendCoins({ coins: 20, action: "roadmap-builder" })
-                setUser((prev) => ({
-                    ...prev, interviewCoin: coinResponse?.interviewCoin,
-                }))
-            } catch (error) {
-                if (shouldBlockOnCoinError(error)) {
-                    setLoading(false)
-                    alert(error?.response?.data?.message || "Failed to use coins.")
-                    return;
-                }
-            }
-
             const response = await api.post("/api/roadmap/generate", {
                 role: role.trim(),
                 targetPackage,
@@ -83,6 +69,8 @@ function Roadmap({ setUser }) {
                 resume
             })
             setRoadmap(response.data.data)
+            const chargedCoins = Number(response.headers["x-interview-coins"])
+            if (Number.isFinite(chargedCoins)) setUser((prev) => ({ ...prev, interviewCoin: chargedCoins }))
             await getAllRoadmaps()
 
         } catch (error) {
@@ -90,7 +78,8 @@ function Roadmap({ setUser }) {
             const status = error?.response?.status;
             const msg = error?.response?.data?.message || error?.message;
             if (status === 429) {
-                setError("Too many requests. Please wait a moment and try again.");
+                const retryAfter = Math.max(1, Number(error?.retryAfterSec) || Number(error?.response?.data?.retryAfter) || Number(error?.response?.headers?.["retry-after"]) || 5)
+                setError(`Too many requests. Please wait ${retryAfter} seconds, then try again.`);
             } else {
                 setError(msg || "Something went wrong while generating your roadmap. Please try again.");
             }

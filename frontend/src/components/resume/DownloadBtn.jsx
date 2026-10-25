@@ -1,7 +1,6 @@
 import { FiDownload } from 'react-icons/fi'
 import { useReactToPrint } from "react-to-print";
-import { shouldBlockOnCoinError, spendCoins } from '../../apis/user.api';
-function DownloadBtn({ docRef, setUser }) {
+function DownloadBtn({ docRef }) {
 
     const handlePdf = useReactToPrint({
         contentRef: docRef,
@@ -9,33 +8,7 @@ function DownloadBtn({ docRef, setUser }) {
     })
 
     const handleDownload = async () => {
-        try {
-            
-                const coinResponse = await spendCoins({ coins: 10, action: "download-pdf" })
-
-                await handlePdf()
-                setUser((prev) => ({
-                    ...prev, interviewCoin: coinResponse?.interviewCoin,
-                }))
-            
-          
-
-        } catch (error) {
-            if (!shouldBlockOnCoinError(error)) {
-                await handlePdf()
-                return
-            }
-            if (error.response?.status === 403) {
-                return alert("Not enough Interview Coins.");
-            }
-            alert(
-                error.response?.data?.message ||
-                "Something went wrong."
-            );
-
-
-
-        }
+        await handlePdf()
 
 
     }

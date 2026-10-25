@@ -50,29 +50,15 @@ api.interceptors.response.use(
             return Promise.reject(error)
         }
 
-        // Auto-recover from rate limits once, invisibly, instead of
-        // immediately surfacing a raw error to the user. The gateway
-        // sends a Retry-After header/body telling us exactly how long
-        // to wait.
         const status = error.response?.status
         const config = error.config || {}
-
-        if (status === 429 && !config.__retriedAfterRateLimit) {
-            const retryAfterSec =
-                Number(error.response?.data?.retryAfter) ||
-                Number(error.response?.headers?.["retry-after"]) ||
-                5
-
-            config.__retriedAfterRateLimit = true
-            await sleep(Math.min(retryAfterSec, 20) * 1000)
-            return api(config)
-        }
 
         // Attach a friendly, ready-to-display message so components
         // don't need to know about status codes / provider errors.
         if (status === 429) {
-            error.friendlyMessage =
-                "This is running on a free plan and is a little busy right now. Please try again in a few seconds."
+            const retryAfterSec = Math.max(1, Number(error.response?.data?.retryAfter) || Number(error.response?.headers?.["retry-after"]) || 5)
+            error.retryAfterSec = retryAfterSec
+            error.friendlyMessage = `Too many requests. Please wait ${retryAfterSec} seconds, then try again.`
         } else if (status === 504) {
             error.friendlyMessage =
                 "The server is waking up from sleep (free hosting spins down when idle). Please try again in ~30 seconds."

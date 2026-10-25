@@ -1,23 +1,31 @@
 import redis from "../../../shared/redis/redis.js";
 import graph from "../graph/graph.js";
 import Interview from "../models/interview.model.js";
+import { refundCoins } from "../middleware/isAuth.js";
+import { z } from "zod";
+import { publishSafely } from "../../../shared/events/bus.js";
+
+const startInterviewSchema = z.object({
+    type: z.string().trim().min(1).max(80),
+    role: z.string().trim().min(1).max(120),
+    useResume: z.boolean().default(false),
+    resume: z.record(z.string(), z.unknown()).default({}),
+}).strict();
+const answerSchema = z.object({
+    interviewId: z.string().min(1),
+    answer: z.string().trim().min(1).max(12000),
+}).strict();
 
 
 export const startInterview = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"]
-        const {
-            type,
-            role,
-            useResume = false,
-            resume = {}, } = req.body;
-
-        if (!type || !role) {
-            return res.status(400).json({
-                success: false,
-                message: "Interview type and role are required",
-            });
+        const userId = req.user?.userId || req.headers["x-user-id"]
+        const parsed = startInterviewSchema.safeParse(req.body);
+        if (!parsed.success) {
+            await refundCoins(req);
+            return res.status(400).json({ success: false, message: "Valid interview type, role, and resume data are required" });
         }
+        const { type, role, useResume, resume } = parsed.data;
 
         const result = await graph.invoke({
             action: "start",
@@ -30,6 +38,7 @@ export const startInterview = async (req, res) => {
         const questions = result.questions;
 
         if (!questions || questions.length === 0) {
+            await refundCoins(req);
             return res.status(500).json({
                 success: false,
                 message: "Failed to generate interview questions",
@@ -52,6 +61,8 @@ export const startInterview = async (req, res) => {
             status: "in-progress",
         })
 
+        res.setHeader("X-Interview-Coins", String(req.user.interviewCoin));
+
         await redis.del(`interviews:${userId}`)
 
         return res.status(200).json({
@@ -66,6 +77,8 @@ export const startInterview = async (req, res) => {
             question: interview.questions[0],
         })
     } catch (error) {
+
+        await refundCoins(req).catch((refundError) => console.error("coin refund failed", refundError));
 
         console.log(error)
 
@@ -82,16 +95,13 @@ export const startInterview = async (req, res) => {
 
 export const submitAnswer = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"]
-
-        const { interviewId, answer } = req.body
-
-        if (!interviewId || !answer) {
-            return res.status(400).json({
-                success: false,
-                message: "Interview Id and Answer are required",
-            });
+        const userId = req.user?.userId || req.headers["x-user-id"]
+        const parsed = answerSchema.safeParse(req.body);
+        if (!parsed.success) {
+            await refundCoins(req);
+            return res.status(400).json({ success: false, message: "Interview ID and answer are required" });
         }
+        const { interviewId, answer } = parsed.data
 
         const interview = await Interview.findOne({
             _id: interviewId,
@@ -99,13 +109,18 @@ export const submitAnswer = async (req, res) => {
         })
 
         if (!interview) {
+            await refundCoins(req);
             return res.status(404).json({
                 success: false,
                 message: "Interview not found",
             });
         }
+        if (!req.coinCharge) {
+            return res.status(500).json({ success: false, message: "Interview feedback charge was not applied" });
+        }
 
         if (interview.status === "completed") {
+            await refundCoins(req);
             return res.status(400).json({
                 success: false,
                 message: "Interview already completed",
@@ -116,6 +131,7 @@ export const submitAnswer = async (req, res) => {
         const currentQuestion = interview.questions[index]
 
         if (!currentQuestion) {
+            await refundCoins(req);
             return res.status(400).json({
                 success: false,
                 message: "Invalid question index",
@@ -174,6 +190,18 @@ export const submitAnswer = async (req, res) => {
 
             await redis.del(`interviews:${userId}`)
 
+            await publishSafely("interview.completed", {
+                eventId: `interview.completed:${interview._id}`,
+                userId: String(userId),
+                module: "interview",
+                result: {
+                    score: interview.overallScore,
+                    weakTopics: interview.weaknesses,
+                    interviewId: String(interview._id),
+                    role: interview.role,
+                },
+            }, { service: "interview", requestId: req.requestId || req.headers["x-request-id"] });
+
             return res.status(200).json({
 
                 success: true,
@@ -211,6 +239,8 @@ export const submitAnswer = async (req, res) => {
         });
 
     } catch (error) {
+
+        await refundCoins(req).catch((refundError) => console.error("coin refund failed", refundError));
 
         console.log(error);
 
@@ -416,7 +446,7 @@ export const getAllInterviews = async (req, res) => {
 
             return res.status(200).json(payload);
 
-        
+
 
 
     } catch (error) {

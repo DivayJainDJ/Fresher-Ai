@@ -1,23 +1,17 @@
-FROM node:20-alpine
-
+FROM node:20-alpine AS install
 WORKDIR /app
-
-RUN apk add --no-cache curl
-
-COPY package*json ./
-RUN npm install
-
-COPY ./services/roadmap/package*json ./services/roadmap/
-RUN cd services/roadmap && npm install
-
-COPY services/roadmap ./services/roadmap
-COPY shared ./shared
-
+COPY services/roadmap/package.json services/roadmap/package-lock.json ./
+RUN npm ci --omit=dev
+FROM node:20-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=install --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node services/roadmap ./services/roadmap
+COPY --chown=node:node services/auth/model/user.model.js ./services/auth/model/user.model.js
+COPY --chown=node:node services/billing/models/creditLedger.model.js ./services/billing/models/creditLedger.model.js
+COPY --chown=node:node shared ./shared
 WORKDIR /app/services/roadmap
-
+USER node
 EXPOSE 6004
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:6004/health || exit 1
-
-CMD [ "npm", "start" ]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 CMD node -e "fetch('http://127.0.0.1:6004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "index.js"]

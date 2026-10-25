@@ -66,12 +66,10 @@ function Billing({ user, setUser }) {
 
                 handler: async function (response) {
                     try {
-                        await api.post("/api/billing/verify", response)
-
-                        const coinRes = await api.post("/api/auth/add-coins", { coins: plan.coins })
+                        const verification = await api.post("/api/billing/verify", response)
 
                         setUser((prev) => ({
-                            ...prev, interviewCoin: coinRes.data.interviewCoin
+                            ...prev, interviewCoin: verification.data.interviewCoin ?? prev.interviewCoin
                         }))
 
                         alert("Payment Successful 🎉")

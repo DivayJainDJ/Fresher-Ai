@@ -1,3 +1,5 @@
+import { dependencyHealth } from "../../shared/utils/health.js"
+import { requestLogger } from "../../shared/middleware/requestLogger.js"
 import express from "express";
 import dotenv from "dotenv";
 dotenv.config();
@@ -10,40 +12,23 @@ import authRouter from "./routes/auth.route.js";
 
 
 
-const app = express();
+const app = express()
+app.use(requestLogger("auth"));
 
 app.use(express.json());
 
 app.use(cookieParser());
-app.use(morgan("dev"));
 
 const allowedOrigins = (process.env.FRONTEND_URL || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-const isAllowedOrigin = (origin) => {
-    if (!origin) {
-        return true;
-    }
-
-    if (allowedOrigins.includes(origin)) {
-        return true;
-    }
-
-    try {
-        const { hostname } = new URL(origin);
-        return hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            hostname.endsWith(".vercel.app");
-    } catch {
-        return false;
-    }
-};
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
 
 app.use(cors({
     origin(origin, callback) {
-        if (allowedOrigins.length === 0 || isAllowedOrigin(origin)) {
+        if (isAllowedOrigin(origin)) {
             return callback(null, true);
         }
 
@@ -52,9 +37,7 @@ app.use(cors({
     credentials: true,
 }));
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "auth" });
-});
+app.get("/health", (_req, res) => dependencyHealth("auth", res));
 
 app.use("/", authRouter);
 

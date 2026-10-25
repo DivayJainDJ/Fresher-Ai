@@ -3,7 +3,7 @@ import { normalizeServiceUrl } from "./normalizeServiceUrl.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const proxyWithHeaders = (serviceUrl, routePrefix) => {
+export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false, rawBody = false } = {}) => {
     const target = normalizeServiceUrl(serviceUrl);
 
     if (!target) {
@@ -24,6 +24,7 @@ export const proxyWithHeaders = (serviceUrl, routePrefix) => {
         },
         on: {
             proxyReq: (proxyReq, req) => {
+                if (req.requestId) proxyReq.setHeader("x-request-id", req.requestId);
                 if (req.user?.userId) {
                     proxyReq.setHeader("x-user-id", req.user.userId);
                 }
@@ -35,8 +36,16 @@ export const proxyWithHeaders = (serviceUrl, routePrefix) => {
                 if (sessionId) {
                     proxyReq.setHeader("x-session-id", sessionId);
                 }
+                if (req.coinCharge && Number.isFinite(req.user?.interviewCoin)) {
+                    proxyReq.setHeader("x-interview-coins", String(req.user.interviewCoin));
+                }
 
-                fixRequestBody(proxyReq, req);
+                if (rawBody && req.rawBody) {
+                    proxyReq.setHeader("content-length", req.rawBody.length);
+                    proxyReq.write(req.rawBody);
+                } else if (!preserveBody) {
+                    fixRequestBody(proxyReq, req);
+                }
             },
             error: (error, req, res) => {
                 console.error(`proxy error [${routePrefix}] -> ${target}`, error.message);

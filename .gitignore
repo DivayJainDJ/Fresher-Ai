@@ -11,3 +11,5 @@ build
 coverage
 **/coverage
 .DS_Store
+.env
+**/.env

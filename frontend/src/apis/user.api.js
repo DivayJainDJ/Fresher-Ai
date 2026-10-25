@@ -35,16 +35,7 @@ export const getCurrentUser = async () => {
     }
 }
 
-export const spendCoins = async (data) => {
-    try {
-        const response = await api.post("/api/auth/use-coins", data)
-        return response.data
-    } catch (error) {
-        throw error
-    }
-}
-
 export const shouldBlockOnCoinError = (error) => {
     const status = error?.response?.status
-    return status === 400 || status === 401 || status === 403
+    return status === 400 || status === 401 || status === 402 || status === 403
 }

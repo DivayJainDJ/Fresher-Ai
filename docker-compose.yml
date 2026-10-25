@@ -1,0 +1,184 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports: ["6379:6379"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports: ["27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo:27017\"}] }).ok }' | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth:
+    build: { context: ./backend, dockerfile: services/auth/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/auth/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 8001 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  resume:
+    build: { context: ./backend, dockerfile: services/resume/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/resume/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6002 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  interview:
+    build: { context: ./backend, dockerfile: services/interview/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/interview/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6003 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  roadmap:
+    build: { context: ./backend, dockerfile: services/roadmap/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/roadmap/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6004 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  progress:
+    build: { context: ./backend, dockerfile: services/progress/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/progress/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6006 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6006/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  billing:
+    build: { context: ./backend, dockerfile: services/billing/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/billing/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6005 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  gateway:
+    build: { context: ./backend, dockerfile: gateway/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/gateway/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      FRONTEND_URL: http://localhost:5173
+      REDIS_URL: redis://redis:6379
+      AUTH_SERVICE_URL: http://auth:8001
+      RESUME_SERVICE_URL: http://resume:6002
+      INTERVIEW_SERVICE_URL: http://interview:6003
+      ROADMAP_SERVICE_URL: http://roadmap:6004
+      PROGRESS_SERVICE_URL: http://progress:6006
+      BILLING_SERVICE_URL: http://billing:6005
+    ports: ["8000:8000"]
+    depends_on:
+      auth: { condition: service_healthy }
+      resume: { condition: service_healthy }
+      interview: { condition: service_healthy }
+      roadmap: { condition: service_healthy }
+      progress: { condition: service_healthy }
+      billing: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_BACKEND_URL: http://localhost:8000
+    ports: ["5173:80"]
+    depends_on:
+      gateway: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  mongo-data:

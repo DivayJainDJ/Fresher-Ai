@@ -9,5 +9,9 @@
   "dependencies": {
     "ioredis": "^5.11.1",
     "source-map-js": "^1.2.1"
+  },
+  "scripts": {
+    "test": "node --test backend/tests/*.test.js",
+    "build:frontend": "npm run build --workspace frontend"
   }
 }

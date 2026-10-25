@@ -3,7 +3,6 @@ import { FiArrowLeft, FiArrowRight, FiBriefcase, FiCheck, FiCheckCircle, FiFileT
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { shouldBlockOnCoinError, spendCoins } from '../../apis/user.api'
 import api from '../../utils/axios'
 import { setResume } from '../../redux/resumeSlice'
 import { startInterview } from '../../apis/interview.api'
@@ -25,28 +24,21 @@ function Step1setup({ user, setUser }) {
         }
         try {
             setUploading(true)
-            try {
-                
-            const coinResponse = await spendCoins({ coins: 10, action: "resume-scorer" })
-
-            setUser((prev) => ({
-                ...prev, interviewCoin: coinResponse?.interviewCoin,
-            }))
-            } catch (error) {
-                if (shouldBlockOnCoinError(error)) {
-                    setUploading(false)
-                    alert(error?.response?.data?.message || "Failed to use coins.")
-                    return;
-                }
-            }
-
-
             const formData = new FormData()
             formData.append("resume", file)
 
             const response = await api.post("/api/resume/upload", formData)
-
-            dispatch(setResume(response?.data?.data))
+            const chargedCoins = Number(response.headers["x-interview-coins"])
+            if (Number.isFinite(chargedCoins)) setUser((prev) => ({ ...prev, interviewCoin: chargedCoins }))
+            let job = { status: response.data.status || "queued" }
+            while (job.status === "queued" || job.status === "processing") {
+                await new Promise((resolve) => setTimeout(resolve, 1500))
+                const status = await api.get(`/api/resume/jobs/${response.data.jobId}`)
+                job = status.data.job
+            }
+            if (job.status !== "completed") throw new Error(job.message || "Resume analysis failed")
+            const result = await api.get("/api/resume/get-resume")
+            dispatch(setResume(result?.data?.data))
             setUploading(false)
             setFile(null)
         } catch (error) {
@@ -67,22 +59,16 @@ function Step1setup({ user, setUser }) {
         }
 
         setStarting(true)
+        let response
         try {
-            const coinResponse = await spendCoins({ coins: 50, action: "start-interview" })
-
-            setUser((prev) => ({
-                ...prev,
-                interviewCoin: coinResponse?.interviewCoin,
-            }))
+            response = await startInterview({ role, type, useResume, resume })
         } catch (error) {
-            if (shouldBlockOnCoinError(error)) {
-                setStarting(false)
-                alert(error?.response?.data?.message || "Failed to use coins.")
-                return
-            }
+            setStarting(false)
+            alert(error?.response?.data?.message || "Unable to start interview right now. Please try again.")
+            return
         }
-
-        const response = await startInterview({ role, type, useResume, resume })
+        const chargedCoins = Number(response?.interviewCoin)
+        if (Number.isFinite(chargedCoins)) setUser((prev) => ({ ...prev, interviewCoin: chargedCoins }))
 
         if(!response?.interviewId){
             setStarting(false)

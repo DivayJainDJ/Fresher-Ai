@@ -8,7 +8,7 @@ export const interviewAgent = async (data) => {
         ? hrInterviewPrompt(data)
         : technicalInterviewPrompt(data)
 
-    const response = await invokeWithRetry(llm, prompt)
+    const response = await invokeWithRetry(llm, prompt, 3, { skipCache: true })
     const parsed = JSON.parse(cleanJson(response.content))
     if (!Array.isArray(parsed) || parsed.length === 0) {
         throw new Error("Empty questions array")

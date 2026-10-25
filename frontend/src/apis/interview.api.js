@@ -4,10 +4,10 @@ import api from "../utils/axios"
 export const startInterview = async (data) => {
     try {
         const response = await api.post("/api/interview/start" , data)
-        return response.data
+        return { ...response.data, interviewCoin: Number(response.headers["x-interview-coins"]) }
     } catch (error) {
         console.log(error)
-        return null
+        throw error
     }
 }
 

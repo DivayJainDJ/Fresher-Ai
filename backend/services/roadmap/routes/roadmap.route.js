@@ -1,10 +1,10 @@
 import express from "express"
 import { generateRoadmap, getAllRoadmap, getRoadmapbyId } from "../controllers/roadmap.controller.js"
-import { isAuth } from "../middleware/isAuth.js"
+import { isAuth, chargeCoins } from "../middleware/isAuth.js"
 
 const roadmapRouter = express.Router()
 
-roadmapRouter.post("/generate" , isAuth, generateRoadmap)
+roadmapRouter.post("/generate" , isAuth, chargeCoins("roadmap-builder"), generateRoadmap)
 
 roadmapRouter.get("/all" , isAuth, getAllRoadmap )
 

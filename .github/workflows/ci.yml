@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --include=dev
+      - run: npm test
+      - run: node node_modules/vite/bin/vite.js build frontend
+      - name: Build backend images
+        run: |
+          docker build -f backend/gateway/Dockerfile backend -t fresherai-gateway:ci
+          docker build -f backend/services/auth/Dockerfile backend -t fresherai-auth:ci
+          docker build -f backend/services/resume/Dockerfile backend -t fresherai-resume:ci
+          docker build -f backend/services/interview/Dockerfile backend -t fresherai-interview:ci
+          docker build -f backend/services/roadmap/Dockerfile backend -t fresherai-roadmap:ci
+          docker build -f backend/services/progress/Dockerfile backend -t fresherai-progress:ci
+          docker build -f backend/services/billing/Dockerfile backend -t fresherai-billing:ci
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile . -t fresherai-frontend:ci

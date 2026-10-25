@@ -2,12 +2,14 @@ import express from "express"
 import dotenv from "dotenv"
 dotenv.config()
 import cors from "cors"
-import morgan from "morgan"
 import cookieParser from "cookie-parser"
 import { getCurrentUser } from "./controllers/user.controller.js"
 import { isAuth } from "./middleware/isAuth.js"
 import { proxyWithHeaders } from "./utils/proxyWithHeaders.js"
-import { rateLimiter } from "./middleware/rateLimiter.js"
+import { tokenBucketRateLimiter } from "./middleware/rateLimiter.js"
+import crypto from "crypto"
+import { getSharedLlmMetrics } from "../shared/utils/cleanJson.js"
+import { requestLogger } from "../shared/middleware/requestLogger.js"
 
 process.on("unhandledRejection", (reason) => {
     console.error("Unhandled Rejection:", reason)
@@ -18,9 +20,15 @@ process.on("uncaughtException", (error) => {
 
 const app = express()
 
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"))
+app.use((req, res, next) => {
+    req.requestId = req.headers["x-request-id"] || crypto.randomUUID()
+    res.setHeader("x-request-id", req.requestId)
+    next()
+})
+
+app.use(requestLogger("gateway"))
 app.set("trust proxy", 1)
-app.use(express.json({ limit: "5mb" }))
+app.use(express.json({ limit: "5mb", verify: (req, _res, buffer) => { if (req.originalUrl.startsWith("/api/billing/webhook")) req.rawBody = Buffer.from(buffer) } }))
 app.use(cookieParser())
 
 const allowedOrigins = (process.env.FRONTEND_URL || "")
@@ -28,25 +36,12 @@ const allowedOrigins = (process.env.FRONTEND_URL || "")
     .map((origin) => origin.trim())
     .filter(Boolean)
 
-const isAllowedOrigin = (origin) => {
-    if (!origin) return true
-    if (allowedOrigins.includes(origin)) return true
-    try {
-        const { hostname } = new URL(origin)
-        return (
-            hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            hostname.endsWith(".vercel.app")
-        )
-    } catch {
-        return false
-    }
-}
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin)
 
 app.use(
     cors({
         origin(origin, callback) {
-            if (allowedOrigins.length === 0 || isAllowedOrigin(origin)) {
+            if (isAllowedOrigin(origin)) {
                 return callback(null, true)
             }
             return callback(new Error(`Origin ${origin} not allowed by CORS`))
@@ -55,8 +50,20 @@ app.use(
     })
 )
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "gateway", uptime: process.uptime() })
+app.get("/health", async (_req, res) => {
+    try {
+        const { default: redis } = await import("../shared/redis/redis.js")
+        await redis.ping()
+        res.json({ status: "ok", service: "gateway", uptime: process.uptime() })
+    } catch (error) {
+        res.status(503).json({ status: "error", service: "gateway", message: error.message })
+    }
+})
+app.get("/metrics", isAuth, async (req, res) => {
+    if (req.user?.email !== process.env.METRICS_ADMIN_EMAIL) return res.status(403).json({ message: "Forbidden" })
+    const metrics = await getSharedLlmMetrics()
+    if (!metrics) return res.status(503).json({ message: "Metrics are temporarily unavailable" })
+    return res.json(metrics)
 })
 
 app.get("/", (_req, res) => {
@@ -79,13 +86,8 @@ const warmServices = () => {
     }
 }
 
-// Warm the downstream services on boot, then keep re-warming them
-// every 10 minutes so they don't spin down on Render's free tier
-// as long as the gateway itself is being kept awake (see README —
-// point a free external pinger like cron-job.org/UptimeRobot at
-// this gateway's /health every 10 min to keep the whole chain warm).
-setTimeout(warmServices, 3000)
-setInterval(warmServices, 10 * 60 * 1000)
+// Optional warm-up for deployments that prefer lower first-request latency.
+if (process.env.ON_RENDER === "true") setTimeout(warmServices, 3000)
 
 app.use((req, res, next) => {
     const timeout = req.path.includes("/generate") || req.path.includes("/upload")
@@ -111,13 +113,15 @@ app.use((req, res, next) => {
 // free-tier LLM quota from a single user exhausting it for everyone
 // else, and returns a friendly, parseable 429 instead of letting the
 // upstream provider's raw rate-limit error leak to the client.
-const aiRateLimiter = rateLimiter(12, 60_000) // 12 generate calls / minute / user
+const aiRateLimiter = tokenBucketRateLimiter({ capacity: 12, refillPerSecond: 0.2 }) // burst of 12, then 12/min/user
 
 app.use("/api/auth", proxyWithHeaders(process.env.AUTH_SERVICE_URL, "/api/auth"))
 app.use("/api/resume", isAuth, aiRateLimiter, proxyWithHeaders(process.env.RESUME_SERVICE_URL, "/api/resume"))
 app.use("/api/interview", isAuth, aiRateLimiter, proxyWithHeaders(process.env.INTERVIEW_SERVICE_URL, "/api/interview"))
 app.use("/api/roadmap", isAuth, aiRateLimiter, proxyWithHeaders(process.env.ROADMAP_SERVICE_URL, "/api/roadmap"))
-app.use("/api/billing/verify", proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
+app.use("/api/progress", isAuth, proxyWithHeaders(process.env.PROGRESS_SERVICE_URL, "/api/progress"))
+app.use("/api/billing/webhook", proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing", { preserveBody: true, rawBody: true }))
+app.use("/api/billing/verify", isAuth, proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
 app.use("/api/billing", isAuth, proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
 app.get("/api/me", isAuth, getCurrentUser)
 

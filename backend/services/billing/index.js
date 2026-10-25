@@ -1,3 +1,5 @@
+import { dependencyHealth } from "../../shared/utils/health.js"
+import { requestLogger } from "../../shared/middleware/requestLogger.js"
 import express from "express"
 import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
@@ -7,14 +9,14 @@ import billingRouter from "./routes/billing.route.js"
 dotenv.config()
 
 const app = express()
-app.use(express.json())
+app.use(requestLogger("billing"))
+app.use(express.json({ verify: (req, _res, buffer) => { if (req.originalUrl.startsWith("/webhook")) req.rawBody = Buffer.from(buffer) } }))
 app.use(cookieParser())
 
 const PORT = process.env.PORT || 6005
 
-app.get("/health", (_req, res) => {
-    res.json({ status: "ok", service: "billing" });
-});
+app.get("/health", (_req, res) => dependencyHealth("billing", res));
+
 
 app.get("/", (_req, res) => {
     res.send("Hello from Billing-service");

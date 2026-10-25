@@ -3,9 +3,9 @@
 // pdf  ---->  pdf Storage  ---> text ---> llm ---> agent ---> promt ---> data ---> save mongoDb ---> redis -->pdf delete ---> resume data ( score , missing skills , recommen.)
 
 import redis from "../../../shared/redis/redis.js";
-import { resumeAgent } from "../agents/resume.agent.js";
-import extractText from "../config/pdf.js";
 import Resume from "../models/resume.model.js";
+import { enqueueResumeJob } from "../services/resumeJobs.js";
+import { refundCoins } from "../middleware/isAuth.js";
 import fs from "fs"
 
 const removeFileIfExists = (filePath) => {
@@ -13,23 +13,6 @@ const removeFileIfExists = (filePath) => {
         fs.unlinkSync(filePath);
     }
 }
-
-const parseResumeResponse = (aiResponse) => {
-    if (!aiResponse) {
-        throw new Error("Resume analysis returned an empty response");
-    }
-
-    if (typeof aiResponse === "object") {
-        return aiResponse;
-    }
-
-    const cleaned = String(aiResponse)
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-
-    return JSON.parse(cleaned);
-};
 
 export const uploadResume = async (req,res) => {
     const file = req.file;
@@ -49,42 +32,16 @@ export const uploadResume = async (req,res) => {
             })
         }
 
-        const resumeText = await extractText(file.path)
+        const sessionId = req.cookies?.session || req.headers["x-session-id"];
+        const jobId = await enqueueResumeJob({ userId, filePath: file.path, sessionId, spendEventKey: req.coinCharge?.eventKey });
+        res.setHeader("X-Interview-Coins", String(req.user.interviewCoin));
+        return res.status(202).json({ success: true, message: "Resume analysis queued", jobId, status: "queued" });
 
-        const aiResponse = await resumeAgent(resumeText)
-        const resumeData = parseResumeResponse(aiResponse)
 
-        let resume = await Resume.findOne({userId})
-
-        if(resume){
-            Object.assign(resume,{
-                ...resumeData,
-                extractedText:resumeText
-
-            }    
-            )
-            await resume.save()
-        }else{
-            resume = await Resume.create({
-                userId,
-                extractedText:resumeText,
-                ...resumeData
-            })
-        }
-
-        await redis.set(`resume:${userId}`,JSON.stringify(resume));
-
-        removeFileIfExists(file.path);
-
-        return res.status(200).json({
-            success:true,
-            message:"Resume analyzed successfully",
-            data:resume
-        })
-
-        
     } catch (error) {
         console.log(error)
+        await refundCoins(req).catch((refundError) => console.error("coin refund failed", refundError));
+
 
         if(file){
             removeFileIfExists(file.path);
@@ -93,7 +50,7 @@ export const uploadResume = async (req,res) => {
             success:false,
             message:error.message,
         })
-        
+
     }
 }
 
@@ -128,14 +85,14 @@ export const getResume = async (req,res) => {
     }
 
     await redis.set(`resume:${userId}`,JSON.stringify(resume));
-   
+
 
      return res.status(200).json({
             success:true,
             source:"mongoDb",
             data:resume
         })
-        
+
     } catch (error) {
         console.log(error)
          return res.status(500).json({
@@ -143,7 +100,7 @@ export const getResume = async (req,res) => {
             message:error.message,
         })
     }
-    
+
 
 
 }
