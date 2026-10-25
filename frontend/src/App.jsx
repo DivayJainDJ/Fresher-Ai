@@ -1,7 +1,7 @@
 import { Routes , Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { getCurrentUser } from './apis/user.api'
 import Scorer from './pages/Scorer'
 import { getResume } from './apis/resume.api'
@@ -14,6 +14,7 @@ import InterviewReport from './pages/InterviewReport'
 import Roadmap from './pages/Roadmap'
 import Billing from './pages/Billing'
 import Practice from './pages/Practice'
+const SqlPlayground = lazy(() => import('./pages/SqlPlayground'))
 
 function App() {
   const [user,setUser]= useState(null)
@@ -110,6 +111,10 @@ function App() {
 
       <Route path='/practice' element={
       user ? <Practice user={user} setUser={setUser}/>
+      : <Navigate to="/" replace/> }/>
+
+      <Route path='/practice/sql' element={
+      user ? <Suspense fallback={<div className="p-8 text-sm text-black/50">Loading SQL playground…</div>}><SqlPlayground /></Suspense>
       : <Navigate to="/" replace/> }/>
 
 

@@ -9,7 +9,10 @@ import { requestLogger } from "../../shared/middleware/requestLogger.js";
 import practiceRouter from "./routes/practice.route.js";
 import Question from "./models/Question.js";
 import QuizAttempt from "./models/QuizAttempt.js";
+import SqlProblem from "./models/SqlProblem.js";
+import SqlAttempt from "./models/SqlAttempt.js";
 import { approvedQuestions } from "./seeds/approvedQuestions.js";
+import { sqlProblems } from "./seeds/sqlProblems.js";
 
 const app = express();
 app.use((req, res, next) => {
@@ -30,10 +33,18 @@ const seedQuestionBank = async () => {
   console.log(`Practice question bank ready (${approvedQuestions.length} bundled questions)`);
 };
 
+const seedSqlProblems = async () => {
+  await SqlProblem.bulkWrite(sqlProblems.map((problem) => ({
+    updateOne: { filter: { slug: problem.slug }, update: { $setOnInsert: problem }, upsert: true },
+  })), { ordered: false });
+  console.log(`SQL problem bank ready (${sqlProblems.length} bundled problems)`);
+};
+
 const start = async () => {
   await connectDB();
-  await Promise.all([Question.init(), QuizAttempt.init()]);
+  await Promise.all([Question.init(), QuizAttempt.init(), SqlProblem.init(), SqlAttempt.init()]);
   await seedQuestionBank();
+  await seedSqlProblems();
   const port = process.env.PORT || 6007;
   const server = app.listen(port, "0.0.0.0", () => console.log(`Practice service started on ${port}`));
   const shutdown = (signal) => {
