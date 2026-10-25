@@ -90,7 +90,7 @@ Fresher-Ai/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - MongoDB (local or Atlas)
 - Redis
 - Firebase project

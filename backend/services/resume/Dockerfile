@@ -1,8 +1,8 @@
-FROM node:20-alpine AS install
+FROM node:22-alpine AS install
 WORKDIR /app
 COPY services/resume/package.json services/resume/package-lock.json ./
 RUN npm ci --omit=dev
-FROM node:20-alpine
+FROM node:22-alpine
 ENV NODE_ENV=production
 RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-eng
 WORKDIR /app

@@ -1,8 +1,8 @@
-FROM node:20-alpine AS install
+FROM node:22-alpine AS install
 WORKDIR /app
 COPY services/career/package.json ./package.json
 RUN npm install --omit=dev --no-package-lock
-FROM node:20-alpine
+FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=install --chown=node:node /app/node_modules ./node_modules
