@@ -7,7 +7,7 @@ export const DEAD_LETTER_STREAM = "fresherai:events:dead";
 export const PROGRESS_GROUP = "progress-service";
 export const ROADMAP_GROUP = "roadmap-service";
 
-const eventTypes = ["interview.completed", "resume.scored", "quiz.completed", "sql.completed", "code.submitted", "roadmap.generated"];
+const eventTypes = ["interview.completed", "resume.scored", "quiz.completed", "sql.completed", "code.submitted", "roadmap.generated", "jd.matched"];
 const eventSchema = z.object({
   eventId: z.string().min(1).max(128),
   type: z.enum(eventTypes),
@@ -16,7 +16,7 @@ const eventSchema = z.object({
   module: z.enum(["interview", "resume", "quiz", "sql", "coding", "roadmap"]),
   result: z.record(z.string(), z.unknown()),
 }).superRefine((event, context) => {
-  const expected = { "interview.completed": "interview", "resume.scored": "resume", "quiz.completed": "quiz", "sql.completed": "sql", "code.submitted": "coding", "roadmap.generated": "roadmap" }[event.type];
+  const expected = { "interview.completed": "interview", "resume.scored": "resume", "quiz.completed": "quiz", "sql.completed": "sql", "code.submitted": "coding", "roadmap.generated": "roadmap", "jd.matched": "resume" }[event.type];
   if (event.module !== expected) context.addIssue({ code: "custom", path: ["module"], message: `Expected module ${expected} for ${event.type}` });
 });
 

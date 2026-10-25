@@ -6,6 +6,8 @@ export const COIN_COSTS = Object.freeze({
   "interview-feedback": 5,
   "download-pdf": 10,
   "code-review": 5,
+  "jd-match": 1,
+  "cover-letter": 1,
 });
 
 export const getCoinCost = (action) => COIN_COSTS[action] ?? null;

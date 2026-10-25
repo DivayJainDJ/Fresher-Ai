@@ -5,4 +5,5 @@ export const eventModule = Object.freeze({
   "sql.completed": "sql",
   "code.submitted": "coding",
   "roadmap.generated": "roadmap",
+  "jd.matched": "resume",
 });

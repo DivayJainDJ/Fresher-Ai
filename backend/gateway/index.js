@@ -78,6 +78,7 @@ const warmServices = () => {
         process.env.ROADMAP_SERVICE_URL,
         process.env.BILLING_SERVICE_URL,
         process.env.PRACTICE_SERVICE_URL,
+        process.env.CAREER_SERVICE_URL,
     ].filter(Boolean)
 
     for (const url of services) {
@@ -122,6 +123,7 @@ app.use("/api/interview", isAuth, aiRateLimiter, proxyWithHeaders(process.env.IN
 app.use("/api/roadmap", isAuth, aiRateLimiter, proxyWithHeaders(process.env.ROADMAP_SERVICE_URL, "/api/roadmap"))
 app.use("/api/progress", isAuth, proxyWithHeaders(process.env.PROGRESS_SERVICE_URL, "/api/progress"))
 app.use("/api/practice", isAuth, proxyWithHeaders(process.env.PRACTICE_SERVICE_URL, "/api/practice"))
+app.use("/api/career", isAuth, aiRateLimiter, proxyWithHeaders(process.env.CAREER_SERVICE_URL, "/api/career"))
 app.use("/api/billing/webhook", proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing", { preserveBody: true, rawBody: true }))
 app.use("/api/billing/verify", isAuth, proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))
 app.use("/api/billing", isAuth, proxyWithHeaders(process.env.BILLING_SERVICE_URL, "/api/billing"))

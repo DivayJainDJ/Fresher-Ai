@@ -136,6 +136,25 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  career:
+    build: { context: ./backend, dockerfile: services/career/Dockerfile }
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/services/career/.env
+        required: false
+    environment: { MONGODB_URL: mongodb://mongo:27017/fresherai?replicaSet=rs0, REDIS_URL: redis://redis:6379, PORT: 6008 }
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6008/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
   billing:
     build: { context: ./backend, dockerfile: services/billing/Dockerfile }
     env_file:
@@ -172,6 +191,7 @@ services:
       ROADMAP_SERVICE_URL: http://roadmap:6004
       PROGRESS_SERVICE_URL: http://progress:6006
       PRACTICE_SERVICE_URL: http://practice:6007
+      CAREER_SERVICE_URL: http://career:6008
       BILLING_SERVICE_URL: http://billing:6005
     ports: ["8000:8000"]
     depends_on:
@@ -181,6 +201,7 @@ services:
       roadmap: { condition: service_healthy }
       progress: { condition: service_healthy }
       practice: { condition: service_healthy }
+      career: { condition: service_healthy }
       billing: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

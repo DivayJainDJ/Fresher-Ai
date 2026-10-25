@@ -75,6 +75,11 @@ services:
           name: fresherai-practice
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: CAREER_SERVICE_URL
+        fromService:
+          name: fresherai-career
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: fresherai-auth
@@ -162,4 +167,18 @@ services:
         value: production
       - key: PORT
         value: "6007"
+      - fromGroup: fresherai-backend
+
+  - type: web
+    name: fresherai-career
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/services/career/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "6008"
       - fromGroup: fresherai-backend
