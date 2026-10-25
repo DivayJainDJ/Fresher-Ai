@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 002 — Frontend Engineer
+Created a portfolio site with HTML, CSS, and vanilla JavaScript. Recreated two designs from screenshots and checked mobile layout. Has no automated tests or production users yet. Skills: HTML, CSS, JavaScript, responsive design.

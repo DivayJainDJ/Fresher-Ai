@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 013 — Data Analyst
+Data analyst with five years in subscription software. Built dbt models and cohort dashboards, partnered with product on retention experiments, and explained uncertainty to executives. Standardized metric definitions across four teams. Skills: SQL, Python, dbt, Looker, statistics, experimentation.

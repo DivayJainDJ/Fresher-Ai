@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 029 — Machine Learning Intern
+Compared logistic regression and tree models on a synthetic housing dataset using a held-out split. Recorded precision and recall, checked leakage, and summarized tradeoffs in a notebook. Skills: Python, scikit-learn, pandas, model evaluation, Jupyter.

@@ -12,6 +12,7 @@
   },
   "scripts": {
     "test": "node --test backend/tests/*.test.js",
-    "build:frontend": "npm run build --workspace frontend"
+    "build:frontend": "npm run build --workspace frontend",
+    "eval:resume": "npm run eval:resume --workspace resume --"
   }
 }

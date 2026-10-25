@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 017 — Cloud Support Associate
+Followed a tutorial to host a personal webpage on a virtual machine. Can connect with SSH and restart a process. Has not worked with alerts, access policies, or customer tickets. Skills: Linux basics, SSH.

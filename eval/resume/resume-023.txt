@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 023 — QA Engineer
+QA engineer with four years testing embedded medical devices. Maintained risk-based verification plans, automated hardware-in-loop tests, and supported traceability audits. Found a timing defect before release. Skills: Python, C++, hardware testing, risk analysis, regulated development.

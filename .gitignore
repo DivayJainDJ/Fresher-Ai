@@ -10,6 +10,9 @@ build
 **/build
 coverage
 **/coverage
+eval/results/*.json
+eval/results/*.md
+!eval/results/.gitkeep
 .DS_Store
 .env
 **/.env

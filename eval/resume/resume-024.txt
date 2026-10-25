@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 024 — QA Engineer
+Built a small Selenium script to sign into a demo site and verify a heading. Learning assertions and selectors. No team QA experience yet. Skills: Python, Selenium basics.

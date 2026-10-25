@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 030 — Machine Learning Intern
+Read introductory material about neural networks and completed a notebook that classified handwritten digits. Followed a starter tutorial and changed the learning rate once. Skills: Python, NumPy, basic machine learning.

@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 005 — Frontend Engineer
+Completed coursework in web programming and made a static recipe page. Can explain basic HTML tags and CSS selectors. No JavaScript projects are listed. Skills: HTML, CSS.

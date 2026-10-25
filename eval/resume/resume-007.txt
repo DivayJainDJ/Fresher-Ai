@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 007 — Backend Engineer
+Made a Python Flask app that stores personal reading notes in SQLite. Added create, edit, and delete routes by following a tutorial. Skills: Python, Flask, SQLite. No deployment or tests described.

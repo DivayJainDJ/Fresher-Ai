@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 003 — Frontend Engineer
+Interned on a commerce storefront. Fixed React form state bugs and wrote component tests for checkout validation. Worked with design to improve error messages; support tickets about confusing form errors fell 12% over one release. Skills: React, JavaScript, Jest, Figma, Git.

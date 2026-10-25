@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 018 — Cloud Support Associate
+Supported a small internal AWS environment for two years. Resolved incidents across EC2, DNS, and IAM; wrote runbooks that shortened median handoff time by 25%. Rotated secrets and reviewed access quarterly. Skills: AWS, Linux, Terraform, networking, incident response.

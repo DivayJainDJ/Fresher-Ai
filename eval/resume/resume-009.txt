@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 009 — Backend Engineer
+Designed service boundaries for a logistics platform used by 70,000 monthly customers. Migrated batch jobs to Go workers, introduced tracing, and lowered median processing latency by 41%. On-call rotation lead for a six-person team. Skills: Go, Kafka, Kubernetes, PostgreSQL, observability, system design.

@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 008 — Backend Engineer
+Software engineering intern working on a Java service. Added pagination and idempotency checks to two payment endpoints and wrote contract tests. Paired with an engineer to debug a race condition affecting duplicate requests. Skills: Java, Spring, REST, JUnit, PostgreSQL.

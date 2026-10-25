@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 011 — Data Analyst
+Analyzed two years of synthetic retail inventory data with SQL and Python. Built a Power BI dashboard for stockouts and documented filters with the operations group. Identified three categories with repeated late replenishment. Skills: SQL, Python, pandas, Power BI, data cleaning.

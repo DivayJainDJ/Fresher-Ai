@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 010 — Backend Engineer
+Completed introductory C programming labs and a command-line calculator. Familiar with variables, loops, and functions. No server, database, or API work listed. Skills: C, basic debugging.

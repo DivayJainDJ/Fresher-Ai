@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 016 — Cloud Support Associate
+Completed a cloud support internship using Linux and AWS. Triaged access and connectivity tickets, documented reproducible steps, and automated disk alerts with Bash. Escalations included timestamps and command output. Skills: Linux, AWS IAM, networking, Bash, ticketing.

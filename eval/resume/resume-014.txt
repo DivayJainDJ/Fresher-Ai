@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 014 — Data Analyst
+Student research assistant cleaning survey responses in R. Wrote reproducible scripts for missing-value handling and summarized results with confidence intervals. Reviewed questionnaire wording with a faculty supervisor. Skills: R, tidyverse, statistics, research methods.

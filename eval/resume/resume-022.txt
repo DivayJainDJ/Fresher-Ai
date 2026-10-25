@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 022 — QA Engineer
+Manual testing volunteer for a student club website. Checked links and spelling on desktop and mobile, then sent a list of issues to the developer. No automation or formal test cases listed. Skills: attention to detail, browser testing.

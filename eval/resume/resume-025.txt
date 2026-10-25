@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 025 — Product Designer
+Researched onboarding issues with six synthetic test participants and prototyped a shorter account setup in Figma. Paired with engineering to check keyboard focus and readable error states. Skills: Figma, prototyping, usability interviews, accessibility, collaboration.

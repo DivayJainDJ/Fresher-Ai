@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 006 — Backend Engineer
+Built a Node.js and Express API for a campus equipment checkout project. Added request validation and PostgreSQL indexes; a common search query dropped from 640 ms to 190 ms. Wrote integration tests for checkout and return flows. Skills: Node.js, Express, PostgreSQL, SQL, Jest.

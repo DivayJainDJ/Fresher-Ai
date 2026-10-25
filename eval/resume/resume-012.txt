@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 012 — Data Analyst
+Practiced Excel formulas and made a chart from a public weather dataset for a class assignment. Can sort data and calculate averages. Skills: Excel, charts. No SQL or scripting evidence.

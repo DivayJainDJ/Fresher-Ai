@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 004 — Frontend Engineer
+Maintained a large Vue application for three years. Led migration of 40 screens to TypeScript, established visual regression checks, and coached two new hires. Improved core web vitals from the 52nd to 84th percentile. Skills: Vue, TypeScript, Playwright, performance, mentoring.

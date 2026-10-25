@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 015 — Data Analyst
+Created spreadsheet reports for a family shop, recording weekly sales and returns. Learned basic pivot tables and checked totals manually. No written analysis, SQL, or dashboard work listed. Skills: spreadsheets, arithmetic.

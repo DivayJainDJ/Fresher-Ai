@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "evaluate": "node evaluation/evaluateResumes.js"
+    "eval:resume": "node evaluation/runResumeEval.js",
+    "evaluate": "node evaluation/runResumeEval.js"
   },
   "dependencies": {
     "@langchain/core": "^1.2.3",

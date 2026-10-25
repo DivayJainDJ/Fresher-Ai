@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 021 — QA Engineer
+Tested a booking prototype with Playwright and JavaScript. Added API checks for date validation, reported defects with reproduction steps, and used GitHub Actions to run smoke tests on pull requests. Skills: Playwright, JavaScript, REST, CI, bug reporting.

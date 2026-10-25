@@ -1,0 +1,2 @@
+SYNTHETIC SAMPLE 001 — Frontend Engineer
+Built a React and TypeScript event calendar for a student club. Added keyboard navigation and accessible labels after testing with four classmates. Split the route bundle and reduced initial download by 28%. Skills: React, TypeScript, CSS, accessibility, Git.
