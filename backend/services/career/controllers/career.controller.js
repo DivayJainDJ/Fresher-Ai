@@ -7,6 +7,50 @@ import User from "../../auth/model/user.model.js";
 import CreditLedger from "../../billing/models/creditLedger.model.js";
 import { spendCoinsWithLedger, refundCoinsWithLedger } from "../../../shared/utils/coinAccounting.js";
 import { publishSafely } from "../../../shared/events/bus.js";
+import Application from "../models/application.model.js";
+
+const isValidDateOnly = (value) => {
+  if (!value) return true;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+const applicationSchema = z.object({
+  company: z.string().trim().min(1).max(120), role: z.string().trim().min(1).max(160),
+  link: z.string().trim().max(2000).optional().default("").refine((value) => !value || /^https?:\/\//i.test(value), "Use a valid http or https job URL"),
+  stage: z.enum(["wishlist", "applied", "oa", "interview", "offer", "rejected"]).optional(),
+  notes: z.string().trim().max(5000).optional().default(""),
+  nextActionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().default("").refine(isValidDateOnly, "Use a real calendar date"),
+}).strict();
+const applicationUpdateSchema = applicationSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
+export const listApplications = async (req, res) => {
+  try { return res.json({ applications: await Application.find({ userId: validUserId(req) }).sort({ updatedAt: -1 }).lean() }); }
+  catch (error) { return res.status(503).json({ message: "Applications are temporarily unavailable" }); }
+};
+export const createApplication = async (req, res) => {
+  const parsed = applicationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid application details", errors: parsed.error.flatten() });
+  try { const application = await Application.create({ ...parsed.data, userId: validUserId(req) }); return res.status(201).json({ application }); }
+  catch { return res.status(503).json({ message: "Could not save application" }); }
+};
+export const updateApplication = async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid application ID" });
+  const parsed = applicationUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid application update", errors: parsed.error.flatten() });
+  try {
+    if (Object.hasOwn(parsed.data, "nextActionDate")) parsed.data.reminderSentForDate = "";
+    const application = await Application.findOneAndUpdate({ _id: req.params.id, userId: validUserId(req) }, { $set: parsed.data }, { new: true, runValidators: true });
+    return application ? res.json({ application }) : res.status(404).json({ message: "Application not found" });
+  } catch { return res.status(503).json({ message: "Could not update application" }); }
+};
+export const deleteApplication = async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid application ID" });
+  try {
+    const application = await Application.findOneAndDelete({ _id: req.params.id, userId: validUserId(req) });
+    if (!application) return res.status(404).json({ message: "Application not found" });
+    return res.json({ success: true });
+  } catch { return res.status(503).json({ message: "Could not delete application" }); }
+};
 
 const matchRequest = z.object({ resumeId: z.string().optional(), jobText: z.string().trim().min(1).max(8000), fresh: z.boolean().optional() }).strict();
 const coverRequest = z.object({ resumeId: z.string().optional(), jobText: z.string().trim().min(1).max(8000), match: z.unknown().optional(), fresh: z.boolean().optional() }).strict();
@@ -60,7 +104,7 @@ export const postMatch = async (req, res) => {
     const result = await matchJob({ resumeText: resume.extractedText, jobText: parsed.data.jobText, skipCache: Boolean(parsed.data.fresh) });
     const response = { success: true, ...result, cached: false, charged: true };
     await redis.set(`career:match:${cacheKey}`, JSON.stringify(response), "EX", 6 * 60 * 60);
-    await publishSafely("jd.matched", { eventId: `jd.matched:${cacheKey}`, userId: String(validUserId(req)), module: "resume", result: { matchScore: result.matchScore, matchedSkills: result.matchedSkills, missingSkills: result.missingSkills, resumeId: String(resume._id), cacheKey } }, { service: "career", requestId: req.requestId });
+    await publishSafely("jd.matched", { eventId: `jd.matched:${cacheKey}`, userId: String(validUserId(req)), module: "resume", timezone: req.headers["x-timezone"], result: { matchScore: result.matchScore, matchedSkills: result.matchedSkills, missingSkills: result.missingSkills, resumeId: String(resume._id), cacheKey } }, { service: "career", requestId: req.requestId });
     res.setHeader("X-Interview-Coins", String(user.interviewCoin));
     await redis.del(lockKey);
     req.coinCharge.refundOnFailure = false;

@@ -14,6 +14,7 @@ const userProgressSchema = new mongoose.Schema({
   currentStreak: { type: Number, default: 0, min: 0 },
   longestStreak: { type: Number, default: 0, min: 0 },
   lastActivityDate: { type: String, default: null },
+  timezone: { type: String, default: "UTC" },
   weakTopics: { type: [String], default: [] },
   lastEventAt: { type: Date, default: null },
 }, { timestamps: true, versionKey: false });

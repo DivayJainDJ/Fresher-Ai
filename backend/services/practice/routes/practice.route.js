@@ -3,8 +3,14 @@ import { getQuiz, submitQuiz } from "../controllers/quiz.controller.js";
 import { isAuth } from "../middleware/isAuth.js";
 import { listSqlProblems, submitSqlAttempt } from "../controllers/sql.controller.js";
 import { getCodingSubmissionTests, listCodingProblems, recordCodeAttempt } from "../controllers/coding.controller.js";
+import { getCompanyPack, listCompanyPacks } from "../controllers/companyPack.controller.js";
+import { getDailyChallenge, submitDailyChallenge } from "../controllers/dailyChallenge.controller.js";
 
 const router = express.Router();
+router.get("/company-packs", isAuth, listCompanyPacks);
+router.get("/company-packs/:slug", isAuth, getCompanyPack);
+router.get("/daily-challenge", isAuth, getDailyChallenge);
+router.post("/daily-challenge/submit", isAuth, submitDailyChallenge);
 router.get("/quiz", isAuth, getQuiz);
 router.post("/quiz/submit", isAuth, submitQuiz);
 router.get("/sql/problems", isAuth, listSqlProblems);

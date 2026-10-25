@@ -7,4 +7,5 @@ export const codeAttemptSchema = z.object({
   passedCount: z.number().int().min(0).max(200),
   totalCount: z.number().int().min(1).max(200),
   runtimeMs: z.number().int().min(0).max(30_000),
+  code: z.string().max(12000).optional().default(""),
 }).strict().refine((value) => value.passedCount <= value.totalCount, "passedCount cannot exceed totalCount");

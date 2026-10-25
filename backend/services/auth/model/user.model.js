@@ -18,10 +18,10 @@ new mongoose.Schema({
    },
 
 
-   interviewCoin:{
-      type:Number,
-      default:150
-   }
+   interviewCoin:{ type:Number, default:150 },
+   timezone:{ type:String, default:"UTC" },
+   leaderboardOptOut:{ type:Boolean, default:false },
+   reminderEmailsEnabled:{ type:Boolean, default:true }
 
 },{
    timestamps:true

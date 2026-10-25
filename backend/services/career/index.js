@@ -7,6 +7,7 @@ import { dependencyHealth } from "../../shared/utils/health.js";
 import { requestLogger } from "../../shared/middleware/requestLogger.js";
 import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import careerRouter from "./routes/career.route.js";
+import { startApplicationReminderWorker, stopApplicationReminderWorker } from "./services/applicationReminders.js";
 
 const app = express();
 app.use((req, res, next) => { req.requestId = req.headers["x-request-id"]; next(); });
@@ -19,9 +20,10 @@ app.use("/", careerRouter);
 
 const start = async () => {
   await connectDB();
+  await startApplicationReminderWorker();
   const port = process.env.PORT || 6008;
   const server = app.listen(port, "0.0.0.0", () => console.log(`Career service started on ${port}`));
-  const shutdown = (signal) => { console.log(`${signal} received; shutting down career service`); server.close(() => process.exit(0)); setTimeout(() => process.exit(1), 10_000).unref(); };
+  const shutdown = async (signal) => { console.log(`${signal} received; shutting down career service`); await stopApplicationReminderWorker(); server.close(() => process.exit(0)); setTimeout(() => process.exit(1), 10_000).unref(); };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 };

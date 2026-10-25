@@ -45,6 +45,7 @@ export const generateRoadmap =async (req,res)=> {
       await publishSafely("roadmap.generated", {
         eventId: `roadmap.generated:${roadmap._id}`,
         userId: String(userId),
+        timezone: req.headers["x-timezone"],
         module: "roadmap",
         result: { roadmapId: String(roadmap._id), topicCount: roadmap.modules.length },
       }, { service: "roadmap", requestId: req.requestId || req.headers["x-request-id"] });

@@ -218,6 +218,7 @@ const streamAnswerFeedbackHandler = async (req, res) => {
             await publishSafely(isBehavioral ? "behavioral.completed" : "interview.completed", {
                 eventId: `${isBehavioral ? "behavioral.completed" : "interview.completed"}:${interview._id}`,
                 userId: String(userId),
+                timezone: req.headers["x-timezone"],
                 module: isBehavioral ? "behavioral" : "interview",
                 result: { score: interview.overallScore, weakTopics: interview.weaknesses, interviewId: String(interview._id), role: interview.role },
             }, { service: "interview", requestId: req.requestId || req.headers["x-request-id"] });
@@ -453,6 +454,7 @@ export const submitAnswer = async (req, res) => {
             await publishSafely(isBehavioral ? "behavioral.completed" : "interview.completed", {
                 eventId: `${isBehavioral ? "behavioral.completed" : "interview.completed"}:${interview._id}`,
                 userId: String(userId),
+                timezone: req.headers["x-timezone"],
                 module: isBehavioral ? "behavioral" : "interview",
                 result: {
                     score: interview.overallScore,

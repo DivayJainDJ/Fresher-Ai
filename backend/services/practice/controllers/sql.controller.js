@@ -2,6 +2,7 @@ import SqlProblem from "../models/SqlProblem.js";
 import SqlAttempt from "../models/SqlAttempt.js";
 import { sqlAttemptSchema, sqlProblemIdSchema } from "../services/sqlLogic.js";
 import { publishSafely } from "../../../shared/events/bus.js";
+import { evaluateSqlAnswer } from "../services/sqlEvaluation.js";
 
 const userIdFor = (req) => req.user?.userId || req.user?._id;
 
@@ -26,16 +27,19 @@ export const submitSqlAttempt = async (req, res) => {
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
   try {
-    const problem = await SqlProblem.findOne({ _id: problemId.data, status: "approved" }).select("topic").lean();
+    const problem = await SqlProblem.findOne({ _id: problemId.data, status: "approved" }).lean();
     if (!problem) return res.status(404).json({ message: "SQL problem not found" });
-    const attempt = await SqlAttempt.create({ userId, problemId: problem._id, ...parsed.data, submittedAt: new Date() });
-    if (parsed.data.passed) {
+    const evaluation = await evaluateSqlAnswer({ problem, query: parsed.data.query });
+    const attempt = await SqlAttempt.create({ userId, problemId: problem._id, passed: evaluation.passed, attemptMs: parsed.data.attemptMs, submittedAt: new Date() });
+    if (evaluation.passed) {
       await publishSafely("sql.completed", {
-        eventId: `sql.completed:${attempt._id}`, userId: String(userId), module: "sql",
+        eventId: `sql.completed:${attempt._id}`, userId: String(userId), module: "sql", timezone: req.headers["x-timezone"],
         result: { attemptId: String(attempt._id), problemId: String(problem._id), topic: problem.topic, score: 100, accuracy: 100, attemptMs: parsed.data.attemptMs, weakTopics: [] },
       }, { service: "practice", requestId: req.requestId });
+    } else {
+      await publishSafely("mistake.recorded", { eventId: `mistake.sql:${attempt._id}`, userId: String(userId), module: "sql", result: { mistakes: [{ topic: problem.topic, questionRef: String(problem._id), question: problem.title, userAnswer: parsed.data.query, correctAnswer: `${problem.expectedResult.columns.join(" | ")}\n${problem.expectedResult.rows.map((row) => row.join(" | ")).join("\n")}`, reviewHint: problem.hint }] } }, { service: "practice", requestId: req.requestId });
     }
-    return res.status(201).json({ attemptId: String(attempt._id), saved: true });
+    return res.status(201).json({ attemptId: String(attempt._id), saved: true, ...evaluation });
   } catch (error) {
     console.error(JSON.stringify({ service: "practice", event: "sql_attempt_save_failed", requestId: req.requestId || null, error: error.message }));
     return res.status(503).json({ message: "Could not save SQL attempt" });

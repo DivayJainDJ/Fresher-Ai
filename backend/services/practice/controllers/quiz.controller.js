@@ -57,8 +57,11 @@ export const submitQuiz = async (req, res) => {
   const weakTopics = Object.entries(scored.perTopicAccuracy).filter(([, stats]) => stats.accuracy < 60).map(([name]) => name);
   await publishSafely("quiz.completed", {
     eventId: `quiz.completed:${attempt._id}`, userId: String(userId), module: "quiz",
+    timezone: req.headers["x-timezone"],
     result: { attemptId: String(attempt._id), score: scored.score, total: scored.total, accuracy: scored.accuracy, perTopicAccuracy: scored.perTopicAccuracy, weakTopics },
   }, { service: "practice", requestId: req.requestId });
+  const mistakes = scored.results.filter((item) => !item.correct).map((item) => ({ topic: item.topic, questionRef: item.questionId, question: item.question, userAnswer: item.selectedIndex == null ? "No answer submitted" : item.options[item.selectedIndex], correctAnswer: item.options[item.correctIndex], reviewHint: item.explanation }));
+  if (mistakes.length) await publishSafely("mistake.recorded", { eventId: `mistake.quiz:${attempt._id}`, userId: String(userId), module: "quiz", result: { mistakes } }, { service: "practice", requestId: req.requestId });
   return res.status(201).json({ attemptId: String(attempt._id), score: scored.score, total: scored.total, accuracy: scored.accuracy, perTopicAccuracy: scored.perTopicAccuracy, results: scored.results, replayed: false });
  } catch (error) {
   console.error(JSON.stringify({ service: "practice", event: "quiz_submit_unhandled", requestId: req.requestId || null, error: error.message }));

@@ -69,7 +69,7 @@ async function processJob({ jobId, userId, filePath, sessionId, spendEventKey })
       resume = await Resume.create({ userId, extractedText: resumeText, ...resumeData });
     }
     await redis.set(`resume:${userId}`, JSON.stringify(resume));
-    const user = await User.findById(userId).select("interviewCoin name email");
+    const user = await User.findById(userId).select("interviewCoin name email timezone");
     if (user && sessionId) await redis.set(`session:${sessionId}`, JSON.stringify({ userId: user._id, name: user.name, email: user.email, interviewCoin: user.interviewCoin }), "EX", 60 * 60 * 24 * 7);
     const result = { resumeId: String(resume._id), score: resume.score, extractionMethod };
     await redis.hset(jobKey, "status", "completed", "extractionMethod", extractionMethod, "result", JSON.stringify(result), "updatedAt", new Date().toISOString());
@@ -77,6 +77,7 @@ async function processJob({ jobId, userId, filePath, sessionId, spendEventKey })
     await publishSafely("resume.scored", {
       eventId: `resume.scored:${jobId}`,
       userId: String(userId),
+      timezone: user?.timezone,
       module: "resume",
       result: { score: resume.score, weakTopics: resume.weaknesses, missingSkills: resume.missingSkills, resumeId: String(resume._id), extractionMethod },
     }, { service: "resume", requestId: jobId });

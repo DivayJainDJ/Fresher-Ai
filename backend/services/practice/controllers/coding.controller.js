@@ -43,7 +43,7 @@ export const recordCodeAttempt = async (req, res) => {
   const userId = userIdFor(req);
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
   try {
-    const problem = await CodingProblem.findOne({ _id: problemId.data, status: "approved" }).select("topicTags title").lean();
+    const problem = await CodingProblem.findOne({ _id: problemId.data, status: "approved" }).select("topicTags title referenceAnswer").lean();
     if (!problem) return res.status(404).json({ message: "Coding problem not found" });
     // Browser-side grading can be tampered with. These attempts drive practice stats only—never coins or authoritative leaderboards.
     const attempt = await CodeAttempt.create({ userId, problemId: problem._id, ...parsed.data, submittedAt: new Date() });
@@ -52,6 +52,7 @@ export const recordCodeAttempt = async (req, res) => {
       eventId: `code.submitted:${attempt._id}`, userId: String(userId), module: "coding",
       result: { attemptId: String(attempt._id), problemId: String(problem._id), title: problem.title, topicTags: problem.topicTags, score, passedCount: parsed.data.passedCount, totalCount: parsed.data.totalCount, runtimeMs: parsed.data.runtimeMs, weakTopics: score < 70 ? problem.topicTags : [] },
     }, { service: "practice", requestId: req.requestId });
+    if (score < 100) await publishSafely("mistake.recorded", { eventId: `mistake.coding:${attempt._id}`, userId: String(userId), module: "coding", result: { mistakes: [{ topic: problem.topicTags[0] || "coding", questionRef: String(problem._id), question: problem.title, userAnswer: parsed.data.code || "No source code captured", correctAnswer: problem.referenceAnswer || "Review the problem requirements and implement all edge cases.", reviewHint: `Passed ${parsed.data.passedCount} of ${parsed.data.totalCount} checks.` }] } }, { service: "practice", requestId: req.requestId });
     return res.status(201).json({ attemptId: String(attempt._id), score, passedCount: attempt.passedCount, totalCount: attempt.totalCount, runtimeMs: attempt.runtimeMs });
   } catch (error) {
     console.error(JSON.stringify({ service: "practice", event: "coding_attempt_save_failed", requestId: req.requestId || null, error: error.message }));

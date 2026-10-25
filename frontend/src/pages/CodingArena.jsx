@@ -118,7 +118,7 @@ function CodingArena() {
       const runtimeMs = executed.runtimeMs ?? Math.round(performance.now() - startedAt)
       const passedCount = executed.error ? 0 : executed.passedCount
       const totalCount = selected.visibleTests.length + testData.hiddenTests.length
-      const { data: saved } = await api.post(`/api/practice/coding/problems/${selected._id}/attempt`, { language, passedCount, totalCount, runtimeMs })
+      const { data: saved } = await api.post(`/api/practice/coding/problems/${selected._id}/attempt`, { language, passedCount, totalCount, runtimeMs, code })
       setResult({ ...executed, passedCount, totalCount, runtimeMs: saved.runtimeMs, score: saved.score, visibleOnly: false })
       if (executed.error) setError(executed.error)
     } catch (requestError) {
@@ -149,7 +149,7 @@ function CodingArena() {
   return (
     <main className="min-h-screen bg-[#f7f7f5] px-4 py-7 text-[#111] sm:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3"><button onClick={() => navigate('/practice')} className="inline-flex items-center gap-2 text-sm text-black/55 hover:text-black"><FiArrowLeft /> Practice studio</button><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800"><FiTerminal /> JavaScript and Python run in isolated browser workers</span></div>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3"><button onClick={() => navigate('/practice')} className="inline-flex items-center gap-2 text-sm text-black/55 hover:text-black"><FiArrowLeft /> Practice studio</button><div className="flex gap-2"><button onClick={() => navigate('/company-packs')} className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold">Company packs</button><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800"><FiTerminal /> JavaScript and Python run in isolated browser workers</span></div></div>
         <header className="mb-6"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-black/45">Coding arena</p><h1 className="text-3xl font-bold tracking-tight">Solve. Run. Improve.</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-black/55">Practice with visible examples, then submit against hidden cases. Code runs locally in a worker with a time limit. AI complexity review is optional and costs 5 interview coins.</p></header>
         {loading ? <div className="rounded-xl bg-white p-6 text-sm text-black/50">Loading original problems…</div> : <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="h-fit rounded-2xl border border-black/8 bg-white p-4"><h2 className="mb-3 px-2 text-xs font-semibold uppercase tracking-widest text-black/40">Problem set</h2><nav className="max-h-[70vh] space-y-1 overflow-y-auto">{problems.map((problem) => <button key={problem._id} onClick={() => selectProblem(problem._id)} className={`w-full rounded-lg px-3 py-2.5 text-left ${selectedId === problem._id ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}><span className="block truncate text-sm font-medium">{problem.title}</span><span className={`mt-0.5 block text-xs capitalize ${selectedId === problem._id ? 'text-white/55' : 'text-black/40'}`}>{problem.difficulty} · {problem.topicTags.join(', ')}</span></button>)}</nav></aside>

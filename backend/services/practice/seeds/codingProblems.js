@@ -1,4 +1,21 @@
-const problem = (data) => ({ status: "approved", ...data });
+const referenceAnswers = {
+  "pair-sum-indices": "Scan once while storing each number's index in a map; for each value, check whether target minus value was seen. O(n) time and O(n) space.",
+  "reverse-text": "Return the characters in reverse order; a two-pointer swap also uses O(1) extra space for a mutable buffer.",
+  "exact-palindrome": "Compare characters from both ends moving inward; return false at the first mismatch. O(n) time.",
+  "maximum-value": "Scan once while tracking the largest value seen. O(n) time and O(1) space.",
+  "binary-search-index": "Use low and high bounds on the sorted array, halve the search interval each step, and return -1 when it becomes empty. O(log n) time.",
+  "count-vowels": "Scan each character and increment a counter when it belongs to the lowercase vowel set. O(n) time.",
+  "factorial-value": "Start with 1 and multiply by every integer from 2 through n; 0 and 1 both return 1.",
+  "check-anagrams": "Count character frequencies in one string and subtract counts for the other; all counts must finish at zero. O(n) time.",
+  "unique-sorted-values": "Walk the sorted values once and append a value only when it differs from the previous one. O(n) time.",
+  "merge-sorted-arrays": "Use two pointers, repeatedly append the smaller current value, then append the remaining suffix. O(n+m) time.",
+  "rotate-array-right": "Normalize k modulo array length and return the last k elements followed by the prefix; handle an empty array.",
+  "first-unique-character": "Count each character, then scan the string again and return the first with count one. O(n) time.",
+  "matrix-diagonal-sum": "For each row index i, add matrix[i][i]. O(n) time.",
+  "balanced-brackets": "Use a stack of opening brackets; each closer must match and pop the top. Finish with an empty stack. O(n) time.",
+  "fibonacci-index": "Iteratively carry the previous two Fibonacci values from index 2 through n. O(n) time and O(1) space.",
+};
+const problem = (data) => ({ status: "approved", referenceAnswer: referenceAnswers[data.slug] || data.statement, ...data });
 
 export const codingProblems = [
   problem({ slug: "pair-sum-indices", title: "Pair Sum Indices", functionName: "twoSum", difficulty: "easy", topicTags: ["arrays", "hash-map"],

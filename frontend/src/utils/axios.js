@@ -20,6 +20,7 @@ api.interceptors.request.use((config) => {
     if (sessionId) {
         config.headers["x-session-id"] = sessionId
     }
+    try { config.headers["x-timezone"] = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" } catch { config.headers["x-timezone"] = "UTC" }
 
     if (config.method === "get") {
         const key = config.url

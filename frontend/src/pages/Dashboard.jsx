@@ -156,6 +156,7 @@ function Dashboard({ user, setUser }) {
         </div>
 
         <div className='h-px bg-black/8 mb-5 md:mb-6' />
+        <div className="mb-5 flex flex-wrap gap-2"><button onClick={() => navigate('/applications')} className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-medium">Job tracker</button><button onClick={() => navigate('/retention')} className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-medium">Daily practice & revision</button><button onClick={() => navigate('/company-packs')} className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-medium">Company packs</button></div>
 
         <section className="mb-7 rounded-2xl border border-black/8 bg-[#f8f8f6] p-4 sm:p-6">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">

@@ -7,4 +7,5 @@ export const eventModule = Object.freeze({
   "code.submitted": "coding",
   "roadmap.generated": "roadmap",
   "jd.matched": "resume",
+  "mistake.recorded": "quiz",
 });

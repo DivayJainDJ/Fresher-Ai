@@ -8,16 +8,17 @@ export const DEAD_LETTER_STREAM = "fresherai:events:dead";
 export const PROGRESS_GROUP = "progress-service";
 export const ROADMAP_GROUP = "roadmap-service";
 
-const eventTypes = ["interview.completed", "behavioral.completed", "resume.scored", "quiz.completed", "sql.completed", "code.submitted", "roadmap.generated", "jd.matched"];
+const eventTypes = ["interview.completed", "behavioral.completed", "resume.scored", "quiz.completed", "sql.completed", "code.submitted", "roadmap.generated", "jd.matched", "mistake.recorded"];
 const eventSchema = z.object({
   eventId: z.string().min(1).max(128),
   type: z.enum(eventTypes),
   userId: z.string().min(1).max(128),
   timestamp: z.string().datetime(),
+  timezone: z.string().max(64).optional(),
   module: z.enum(["interview", "behavioral", "resume", "quiz", "sql", "coding", "roadmap"]),
   result: z.record(z.string(), z.unknown()),
 }).superRefine((event, context) => {
-  const expected = { "interview.completed": ["interview"], "behavioral.completed": ["behavioral"], "resume.scored": ["resume"], "quiz.completed": ["quiz"], "sql.completed": ["sql"], "code.submitted": ["coding"], "roadmap.generated": ["roadmap"], "jd.matched": ["resume"] }[event.type];
+  const expected = { "interview.completed": ["interview"], "behavioral.completed": ["behavioral"], "resume.scored": ["resume"], "quiz.completed": ["quiz"], "sql.completed": ["sql"], "code.submitted": ["coding"], "roadmap.generated": ["roadmap"], "jd.matched": ["resume"], "mistake.recorded": ["quiz", "sql", "coding"] }[event.type];
   if (!expected.includes(event.module)) context.addIssue({ code: "custom", path: ["module"], message: `Expected module ${expected.join(" or ")} for ${event.type}` });
 });
 

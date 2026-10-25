@@ -70,8 +70,8 @@ function SqlPlayground() {
     try {
       const evaluation = runInDisposableDatabase(SQL, selected, query)
       setResult(evaluation)
-      // Deliberately send no SQL text or result rows to the backend.
-      await api.post(`/api/practice/sql/problems/${selected._id}/attempt`, { passed: evaluation.passed, attemptMs })
+      const { data: saved } = await api.post(`/api/practice/sql/problems/${selected._id}/attempt`, { query, attemptMs })
+      setResult((current) => ({ ...current, passed: saved.passed, message: saved.message, actual: saved.actual || current.actual }))
     } catch (runError) {
       setError(runError.response?.data?.message || runError.message || 'The query could not be run.')
     } finally {
@@ -89,7 +89,7 @@ function SqlPlayground() {
         <header className="mb-6">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-black/45">SQL playground</p>
           <h1 className="text-3xl font-bold tracking-tight">Query the data. Learn by doing.</h1>
-          <p className="mt-2 text-sm text-black/55">SQLite runs in a fresh in-memory database for every check. Your SQL never leaves this browser.</p>
+          <p className="mt-2 text-sm text-black/55">Queries run locally for instant feedback and are also checked by the server. Incorrect queries are saved to your private mistake notebook for revision.</p>
         </header>
 
         {loading ? <div className="rounded-xl bg-white p-6 text-sm text-black/50">Loading original SQL problems…</div> : <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">

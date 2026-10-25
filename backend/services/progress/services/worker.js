@@ -1,11 +1,14 @@
 import crypto from "node:crypto";
 import { createStreamConsumer, ensureConsumerGroup, PROGRESS_GROUP } from "../../../shared/events/bus.js";
 import { processProgressEvent } from "./processProgressEvent.js";
+import { processMistakeEvent } from "./processMistakeEvent.js";
+import ProgressEvent from "../models/progressEvent.model.js";
+import Mistake from "../models/mistake.model.js";
 
 const consumer = createStreamConsumer({
   group: PROGRESS_GROUP,
   consumer: `${process.env.CONSUMER_NAME || "progress"}-${crypto.randomUUID()}`,
-  handler: processProgressEvent,
+  handler: (event) => event.type === "mistake.recorded" ? processMistakeEvent(event) : processProgressEvent(event),
   maxAttempts: Number(process.env.EVENT_MAX_ATTEMPTS || 5),
 });
 
@@ -25,6 +28,7 @@ const poll = async () => {
 };
 
 export const startProgressWorker = async () => {
+  await Promise.all([ProgressEvent.init(), Mistake.init()]);
   await ensureConsumerGroup(PROGRESS_GROUP);
   running = true;
   poll();

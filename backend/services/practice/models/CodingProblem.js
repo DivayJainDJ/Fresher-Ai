@@ -8,6 +8,7 @@ const codingProblemSchema = new mongoose.Schema({
   slug: { type: String, required: true, unique: true, index: true },
   title: { type: String, required: true, trim: true },
   statement: { type: String, required: true },
+  referenceAnswer: { type: String, default: "", maxlength: 5000 },
   constraints: { type: [String], default: [] },
   functionName: { type: String, required: true },
   starterCode: {

@@ -17,6 +17,9 @@ import { sqlProblems } from "./seeds/sqlProblems.js";
 import CodingProblem from "./models/CodingProblem.js";
 import CodeAttempt from "./models/CodeAttempt.js";
 import { codingProblems } from "./seeds/codingProblems.js";
+import CompanyPack from "./models/CompanyPack.js";
+import { companyPacks } from "./seeds/companyPacks.js";
+import DailyChallengeAttempt from "./models/DailyChallengeAttempt.js";
 
 const app = express();
 app.use((req, res, next) => {
@@ -46,18 +49,27 @@ const seedSqlProblems = async () => {
 };
 
 const seedCodingProblems = async () => {
-  await CodingProblem.bulkWrite(codingProblems.map((problem) => ({
-    updateOne: { filter: { slug: problem.slug }, update: { $setOnInsert: problem }, upsert: true },
-  })), { ordered: false });
+  await CodingProblem.bulkWrite(codingProblems.map((problem) => {
+    const { referenceAnswer, ...insertOnly } = problem;
+    return { updateOne: { filter: { slug: problem.slug }, update: { $setOnInsert: insertOnly, $set: { referenceAnswer } }, upsert: true } };
+  }), { ordered: false });
   console.log(`Coding problem bank ready (${codingProblems.length} bundled problems)`);
+};
+
+const seedCompanyPacks = async () => {
+  await CompanyPack.bulkWrite(companyPacks.map((pack) => ({
+    updateOne: { filter: { slug: pack.slug }, update: { $set: pack }, upsert: true },
+  })), { ordered: false });
+  console.log(`Reviewed company packs ready (${companyPacks.length} bundled packs)`);
 };
 
 const start = async () => {
   await connectDB();
-  await Promise.all([Question.init(), QuizAttempt.init(), SqlProblem.init(), SqlAttempt.init(), CodingProblem.init(), CodeAttempt.init()]);
+  await Promise.all([Question.init(), QuizAttempt.init(), SqlProblem.init(), SqlAttempt.init(), CodingProblem.init(), CodeAttempt.init(), CompanyPack.init(), DailyChallengeAttempt.init()]);
   await seedQuestionBank();
   await seedSqlProblems();
   await seedCodingProblems();
+  await seedCompanyPacks();
   const port = process.env.PORT || 6007;
   const server = app.listen(port, "0.0.0.0", () => console.log(`Practice service started on ${port}`));
   const shutdown = (signal) => {

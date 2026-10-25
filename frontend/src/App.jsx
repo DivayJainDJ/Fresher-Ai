@@ -14,6 +14,10 @@ import InterviewReport from './pages/InterviewReport'
 import Roadmap from './pages/Roadmap'
 import Billing from './pages/Billing'
 import Practice from './pages/Practice'
+import CompanyPacks from './pages/CompanyPacks'
+import DesignPractice from './pages/DesignPractice'
+import JobTracker from './pages/JobTracker'
+import RetentionHub from './pages/RetentionHub'
 const SqlPlayground = lazy(() => import('./pages/SqlPlayground'))
 const CodingArena = lazy(() => import('./pages/CodingArena'))
 
@@ -113,6 +117,11 @@ function App() {
       <Route path='/practice' element={
       user ? <Practice user={user} setUser={setUser}/>
       : <Navigate to="/" replace/> }/>
+
+      <Route path='/company-packs' element={user ? <CompanyPacks /> : <Navigate to="/" replace/> }/>
+      <Route path='/interview/design' element={user ? <DesignPractice /> : <Navigate to="/" replace/> }/>
+      <Route path='/applications' element={user ? <JobTracker /> : <Navigate to="/" replace/> }/>
+      <Route path='/retention' element={user ? <RetentionHub /> : <Navigate to="/" replace/> }/>
 
       <Route path='/practice/sql' element={
       user ? <Suspense fallback={<div className="p-8 text-sm text-black/50">Loading SQL playground…</div>}><SqlPlayground /></Suspense>
