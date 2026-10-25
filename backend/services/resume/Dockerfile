@@ -4,6 +4,7 @@ COPY services/resume/package.json services/resume/package-lock.json ./
 RUN npm ci --omit=dev
 FROM node:20-alpine
 ENV NODE_ENV=production
+RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-eng
 WORKDIR /app
 COPY --from=install --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node services/resume ./services/resume

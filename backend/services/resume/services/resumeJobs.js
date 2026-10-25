@@ -45,9 +45,12 @@ const pollRedisQueue = async () => {
 
 async function processJob({ jobId, userId, filePath, sessionId, spendEventKey }) {
   const jobKey = `resume-job:${jobId}`;
+  let extractionMethod = "unknown";
   try {
     await redis.hset(jobKey, "status", "processing", "updatedAt", new Date().toISOString());
-    const resumeText = await extractText(filePath);
+    const extraction = await extractText(filePath);
+    const resumeText = extraction.text;
+    extractionMethod = extraction.extractionMethod;
     const resumeData = JSON.parse(await resumeAgent(resumeText));
     let resume = await Resume.findOne({ userId });
     if (resume) {
@@ -59,18 +62,21 @@ async function processJob({ jobId, userId, filePath, sessionId, spendEventKey })
     await redis.set(`resume:${userId}`, JSON.stringify(resume));
     const user = await User.findById(userId).select("interviewCoin name email");
     if (user && sessionId) await redis.set(`session:${sessionId}`, JSON.stringify({ userId: user._id, name: user.name, email: user.email, interviewCoin: user.interviewCoin }), "EX", 60 * 60 * 24 * 7);
-    await redis.hset(jobKey, "status", "completed", "updatedAt", new Date().toISOString());
+    const result = { resumeId: String(resume._id), score: resume.score, extractionMethod };
+    await redis.hset(jobKey, "status", "completed", "extractionMethod", extractionMethod, "result", JSON.stringify(result), "updatedAt", new Date().toISOString());
+    console.info(JSON.stringify({ requestId: jobId, service: "resume", event: "job_completed", extractionMethod, resumeId: result.resumeId, score: result.score }));
     await publishSafely("resume.scored", {
       eventId: `resume.scored:${jobId}`,
       userId: String(userId),
       module: "resume",
-      result: { score: resume.score, weakTopics: resume.weaknesses, missingSkills: resume.missingSkills, resumeId: String(resume._id) },
+      result: { score: resume.score, weakTopics: resume.weaknesses, missingSkills: resume.missingSkills, resumeId: String(resume._id), extractionMethod },
     }, { service: "resume", requestId: jobId });
   } catch (error) {
-    console.error(JSON.stringify({ requestId: jobId, service: "resume", event: "job_failed", error: error.message }));
+    extractionMethod = error.extractionMethod || extractionMethod;
+    console.error(JSON.stringify({ requestId: jobId, service: "resume", event: "job_failed", extractionMethod, error: error.message }));
     const user = await refundCoinsWithLedger({ User, Ledger: CreditLedger, userId, action: "resume-scorer", eventKey: `refund:${spendEventKey}`, chargeEventKey: spendEventKey }).catch(() => null);
     if (user && sessionId) await redis.set(`session:${sessionId}`, JSON.stringify({ userId: user._id, name: user.name, email: user.email, interviewCoin: user.interviewCoin }), "EX", 60 * 60 * 24 * 7).catch(() => {});
-    await redis.hset(jobKey, "status", "failed", "message", "Resume analysis failed; coins were refunded", "updatedAt", new Date().toISOString()).catch(() => {});
+    await redis.hset(jobKey, "status", "failed", "extractionMethod", extractionMethod, "message", error.userMessage || "Resume analysis failed; coins were refunded", "updatedAt", new Date().toISOString()).catch(() => {});
   } finally {
     fs.promises.unlink(filePath).catch(() => {});
     await redis.expire(jobKey, JOB_TTL_SECONDS).catch(() => {});
