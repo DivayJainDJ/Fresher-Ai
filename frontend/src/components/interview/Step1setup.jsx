@@ -16,6 +16,23 @@ function Step1setup({ user, setUser }) {
     const [file, setFile] = useState(null)
     const [uploading, setUploading] = useState(false)
     const [starting, setStarting] = useState(false)
+    const [category, setCategory] = useState('')
+    const [roughStory, setRoughStory] = useState('')
+    const [storyResult, setStoryResult] = useState(null)
+    const [buildingStory, setBuildingStory] = useState(false)
+
+    const buildStarStory = async () => {
+        if (!roughStory.trim() || buildingStory) return
+        setBuildingStory(true)
+        try {
+            const response = await api.post('/api/interview/behavioral/star-builder', { roughStory, category: category || 'teamwork' })
+            setStoryResult(response.data)
+        } catch (error) {
+            alert(error?.response?.data?.message || 'Could not build the STAR story right now.')
+        } finally {
+            setBuildingStory(false)
+        }
+    }
 
     const uploadResume = async () => {
         if (!file) {
@@ -61,7 +78,7 @@ function Step1setup({ user, setUser }) {
         setStarting(true)
         let response
         try {
-            response = await startInterview({ role, type, useResume, resume })
+            response = await startInterview({ role, type, useResume, resume, ...(type === 'behavioral' ? { category: category || undefined, idempotencyKey: window.crypto.randomUUID() } : {}) })
         } catch (error) {
             setStarting(false)
             alert(error?.response?.data?.message || "Unable to start interview right now. Please try again.")
@@ -160,7 +177,7 @@ function Step1setup({ user, setUser }) {
                             <label className='text-xs font-medium text-zinc-400'>Interview Type</label>
                             <div className='mt-1.5 flex rounded-xl bg-[#17181E] p-1 border border-white/10'>
                                 {
-                                    ["technical", "hr"].map((item) => (
+                                    ["technical", "hr", "behavioral"].map((item) => (
                                         <button key={item}
                                             onClick={() => setType(item)}
                                             className={`flex-1 h-9 rounded-lg text-xs sm:text-sm font-medium capitalize transition-all ${type === item ? "bg-white text-black" : "text-zinc-400 hover:text-white"
@@ -258,8 +275,10 @@ function Step1setup({ user, setUser }) {
 
                                 </motion.div>
                             )
-                        }
-                    </div>
+                                }
+                            </div>
+                            {type === 'behavioral' && <select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-2 h-10 w-full rounded-xl border border-white/10 bg-[#17181E] px-3 text-xs text-white"><option value="">Mixed behavioral practice</option>{['introduction','teamwork','conflict','failure','leadership','salary'].map((item) => <option key={item} value={item} className="text-black">{item[0].toUpperCase() + item.slice(1)}</option>)}</select>}
+                            {type === 'behavioral' && <div className="mt-4 rounded-xl border border-white/10 bg-[#17181E] p-3"><label className="text-xs font-medium text-zinc-300">STAR story builder</label><textarea value={roughStory} onChange={(event) => setRoughStory(event.target.value)} maxLength={6000} rows={3} placeholder="Write a rough story from work, school, or a project…" className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-white outline-none placeholder:text-white/30"/><button type="button" onClick={buildStarStory} disabled={!roughStory.trim() || buildingStory} className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-black disabled:opacity-50">{buildingStory ? 'Building…' : 'Structure my story'}</button>{storyResult && <div className="mt-3 rounded-lg bg-black/20 p-3"><p className="whitespace-pre-wrap text-xs leading-5 text-white/75">{storyResult.improvedAnswer}</p><ul className="mt-2 list-disc pl-4 text-[11px] text-white/45">{storyResult.nextSteps?.map((step, index) => <li key={index}>{step}</li>)}</ul></div>}</div>}
 
                     <motion.button
                     onClick={start}

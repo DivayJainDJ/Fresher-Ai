@@ -5,6 +5,7 @@ import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
 import { connectDB } from "./config/db.js"
 import interviewRouter from "./routes/interview.route.js"
+import { seedBehavioralQuestions } from "./seeds/behavioralQuestions.js"
 dotenv.config()
 
 const app = express()
@@ -28,6 +29,7 @@ app.use("/", interviewRouter);
 const startServer = async () => {
     try {
         await connectDB();
+        await seedBehavioralQuestions();
 
         const server = app.listen(PORT, "0.0.0.0", () => {
             console.log(`Interview-service Started on ${PORT}`);

@@ -9,7 +9,7 @@ const progressEventSchema = z.object({
   type: z.enum(Object.keys(eventModule)),
   userId: z.string().min(1),
   timestamp: z.string().datetime(),
-  module: z.enum(["interview", "resume", "quiz", "sql", "coding", "roadmap"]),
+  module: z.enum(["interview", "behavioral", "resume", "quiz", "sql", "coding", "roadmap"]),
   result: z.record(z.string(), z.unknown()),
 });
 

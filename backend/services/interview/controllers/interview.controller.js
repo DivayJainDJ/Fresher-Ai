@@ -1,15 +1,18 @@
 import redis from "../../../shared/redis/redis.js";
 import graph from "../graph/graph.js";
 import Interview from "../models/interview.model.js";
-import { refundCoins } from "../middleware/isAuth.js";
+import { refundCoins, chargeCoins } from "../middleware/isAuth.js";
 import { z } from "zod";
 import { publishSafely } from "../../../shared/events/bus.js";
+import BehavioralQuestion, { BEHAVIORAL_CATEGORIES } from "../models/behavioralQuestion.model.js";
 
 const startInterviewSchema = z.object({
-    type: z.string().trim().min(1).max(80),
+    type: z.enum(["technical", "hr", "behavioral"]),
     role: z.string().trim().min(1).max(120),
     useResume: z.boolean().default(false),
     resume: z.record(z.string(), z.unknown()).default({}),
+    category: z.enum(BEHAVIORAL_CATEGORIES).optional(),
+    idempotencyKey: z.string().min(8).max(128).optional(),
 }).strict();
 const answerSchema = z.object({
     interviewId: z.string().min(1),
@@ -26,16 +29,31 @@ export const startInterview = async (req, res) => {
             return res.status(400).json({ success: false, message: "Valid interview type, role, and resume data are required" });
         }
         const { type, role, useResume, resume } = parsed.data;
+        const category = parsed.data.category;
+        const action = type === "behavioral" ? "behavioral-session" : "start-interview";
+        await new Promise((resolve, reject) => chargeCoins(action)(req, res, (error) => error ? reject(error) : resolve()));
+        if (res.headersSent) return;
+        if (!req.coinCharge) return res.status(402).json({ success: false, message: "Interview session charge was not applied" });
+        if (req.coinCharge.alreadyProcessed && req.coinCharge.action === "behavioral-session") return res.status(409).json({ success: false, message: "This session key was already charged. Start a new session with a fresh idempotencyKey." });
 
         const result = await graph.invoke({
             action: "start",
             role,
             type,
             useResume,
-            resume
+            resume,
+            category,
         })
 
-        const questions = result.questions;
+        let questions = result.questions;
+        if (type === "behavioral") {
+            const bankQuestions = await BehavioralQuestion.aggregate([
+                { $match: { active: true, ...(category ? { category } : {}) } },
+                { $sample: { size: 6 } },
+                { $project: { question: 1, category: 1 } },
+            ]);
+            if (bankQuestions.length) questions = bankQuestions.map((item, index) => ({ question: item.question, category: item.category, difficulty: index < 2 ? "easy" : index < 4 ? "medium" : "hard", timer: 90 }));
+        }
 
         if (!questions || questions.length === 0) {
             await refundCoins(req);
@@ -115,7 +133,12 @@ export const submitAnswer = async (req, res) => {
                 message: "Interview not found",
             });
         }
-        if (!req.coinCharge) {
+        const isBehavioral = interview.type === "behavioral";
+        if (!isBehavioral) {
+            await new Promise((resolve, reject) => chargeCoins("interview-feedback")(req, res, (error) => error ? reject(error) : resolve()));
+        }
+        if (res.headersSent) return;
+        if (!req.coinCharge && !isBehavioral) {
             return res.status(500).json({ success: false, message: "Interview feedback charge was not applied" });
         }
 
@@ -157,6 +180,7 @@ export const submitAnswer = async (req, res) => {
             role: interview.role,
 
             type: interview.type,
+            category: currentQuestion.category,
 
             questions: interview.questions,
         })
@@ -190,10 +214,10 @@ export const submitAnswer = async (req, res) => {
 
             await redis.del(`interviews:${userId}`)
 
-            await publishSafely("interview.completed", {
-                eventId: `interview.completed:${interview._id}`,
+            await publishSafely(isBehavioral ? "behavioral.completed" : "interview.completed", {
+                eventId: `${isBehavioral ? "behavioral.completed" : "interview.completed"}:${interview._id}`,
                 userId: String(userId),
-                module: "interview",
+                module: isBehavioral ? "behavioral" : "interview",
                 result: {
                     score: interview.overallScore,
                     weakTopics: interview.weaknesses,
@@ -460,5 +484,35 @@ export const getAllInterviews = async (req, res) => {
         });
     }
 }
+
+export const getBehavioralQuestions = async (req, res) => {
+    const parsed = z.object({ category: z.enum(BEHAVIORAL_CATEGORIES).optional() }).safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid behavioral question category", categories: BEHAVIORAL_CATEGORIES });
+    try {
+        const filter = { active: true, ...(parsed.data.category ? { category: parsed.data.category } : {}) };
+        const questions = await BehavioralQuestion.find(filter).select("question category").sort({ category: 1, question: 1 }).lean();
+        return res.json({ success: true, categories: BEHAVIORAL_CATEGORIES, questions });
+    } catch (error) {
+        console.error(JSON.stringify({ service: "interview", event: "behavioral_questions_failed", requestId: req.requestId || null, error: error.message }));
+        return res.status(503).json({ message: "Behavioral questions are temporarily unavailable" });
+    }
+};
+
+const starBuilderSchema = z.object({ roughStory: z.string().trim().min(1).max(6000), category: z.enum(BEHAVIORAL_CATEGORIES).optional() }).strict();
+export const buildStarStory = async (req, res) => {
+    const parsed = starBuilderSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Provide a rough story of up to 6,000 characters", errors: parsed.error.flatten() });
+    try {
+        const result = await graph.invoke({
+            action: "feedback", type: "behavioral", category: parsed.data.category || "teamwork",
+            question: "Restructure this rough story into a concise STAR answer. Preserve facts and mark missing details with placeholders.",
+            answer: parsed.data.roughStory, difficulty: "medium", completed: false,
+        });
+        return res.json({ success: true, ...result.feedback });
+    } catch (error) {
+        console.error(JSON.stringify({ service: "interview", event: "star_story_builder_failed", requestId: req.requestId || null, error: error.message }));
+        return res.status(503).json({ message: "STAR story builder is temporarily unavailable" });
+    }
+};
 
 

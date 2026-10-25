@@ -9,7 +9,8 @@ export async function interviewNode(state) {
         role:state.role,
         type:state.type,
         useResume:state.useResume,
-        resume:state.resume
+        resume:state.resume,
+        category: state.category,
 
     })
 
@@ -27,6 +28,9 @@ export async function feedbackNode(state) {
 
         difficulty: state.difficulty,
 
+        type: state.type,
+        category: state.category,
+
     })
 
     return {
@@ -41,7 +45,7 @@ export async function summaryNode(state) {
 
         type: state.type,
 
-        questions: state.questions,
+         questions: state.questions,
     })
 
     return {

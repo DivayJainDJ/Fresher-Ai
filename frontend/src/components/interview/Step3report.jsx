@@ -3,6 +3,7 @@ import { motion } from "motion/react"
 import { FiArrowLeft, FiAward, FiCheck, FiTarget, FiTrendingUp, FiX } from 'react-icons/fi'
 import { useNavigate } from 'react-router-dom'
 import DownloadBtn from '../resume/DownloadBtn'
+import { FiActivity } from 'react-icons/fi'
 function Step3report({ report, user, setUser }) {
   const navigate = useNavigate()
   const reportRef = useRef(null)
@@ -45,6 +46,7 @@ function Step3report({ report, user, setUser }) {
 
 
         <div className='p-8' ref={reportRef}>
+          {report.type === 'behavioral' && <section className="mb-5 rounded-2xl border border-black/10 bg-white p-5"><div className="flex items-center gap-2"><FiActivity/><h2 className="font-bold">STAR coach results</h2></div><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(report.questions?.[0]?.feedback?.starScore || {}).map(([name, score]) => <div key={name} className="rounded-xl bg-gray-100 p-3"><p className="text-xs capitalize text-black/45">{name}</p><p className="mt-1 text-xl font-bold">{score}<span className="text-xs text-black/40"> / 5</span></p></div>)}</div><p className="mt-4 text-sm text-black/60">{report.questions?.[0]?.feedback?.improvedAnswer}</p>{report.questions?.[0]?.feedback?.nextSteps?.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-black/55">{report.questions[0].feedback.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>}</section>}
           <div className='grid md:grid-cols-3 gap-5'>
             <div className='rounded-2xl bg-[#17181E] border border-white/10 p-6'>
 

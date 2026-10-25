@@ -57,6 +57,19 @@ const feedbackSchema = new mongoose.Schema(
             type: [String],
             default: [],
         },
+
+        starScore: {
+            type: new mongoose.Schema({
+                situation: { type: Number, min: 0, max: 5 },
+                task: { type: Number, min: 0, max: 5 },
+                action: { type: Number, min: 0, max: 5 },
+                result: { type: Number, min: 0, max: 5 },
+            }, { _id: false }),
+        },
+        clarity: { type: Number, min: 0, max: 100 },
+        confidence: { type: Number, min: 0, max: 100 },
+        improvedAnswer: { type: String, default: "" },
+        nextSteps: { type: [String], default: [] },
     },
     { _id: false }
 );
@@ -67,6 +80,7 @@ const questionSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        category: { type: String, enum: ["introduction", "teamwork", "conflict", "failure", "leadership", "salary"] },
         userAnswer: {
             type: String,
             default: "",
@@ -101,7 +115,7 @@ const interviewSchema = new mongoose.Schema(
 
         type: {
             type: String,
-            enum: ["hr", "technical"],
+            enum: ["hr", "technical", "behavioral"],
             required: true,
         },
 

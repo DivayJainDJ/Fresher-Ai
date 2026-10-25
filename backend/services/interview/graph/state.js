@@ -16,6 +16,8 @@ const InterviewState = Annotation.Root({
 
     question: Annotation(),
 
+    category: Annotation(),
+
     answer: Annotation(),
 
     difficulty: Annotation(),

@@ -504,14 +504,17 @@ const navigate = useNavigate()
 
           <div className='mt-3 min-h-[0px]'>
             <AnimatePresence>
-              {feedback && (
+            {feedback && (
                 <motion.div 
                 initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 ,y:6}}
                 className='rounded-xl border border-green-500/20 bg-green-500/5 p-4 max-h-40 overflow-y-auto'>
                   <p className='text-xs uppercase tracking-widest text-green-400 mb-2'>AI Feedback</p>
-                  <p className='text-sm text-zinc-300 leading-6'>{feedback.feedback}</p>
+                  {feedback.starScore ? <div className="mb-2 grid grid-cols-4 gap-2">{Object.entries(feedback.starScore).map(([key, value]) => <div key={key} className="rounded-lg bg-white/5 p-2"><span className="block text-[10px] capitalize text-white/40">{key}</span><strong>{value}/5</strong></div>)}</div> : null}
+                  <p className='text-sm text-zinc-300 leading-6'>{feedback.feedback || `${feedback.clarity != null ? `Clarity ${feedback.clarity}/100. ` : ''}${feedback.confidence != null ? `Confidence ${feedback.confidence}/100. ` : ''}`}</p>
+                  {feedback.improvedAnswer && <div className="mt-3 rounded-lg bg-white/5 p-3"><p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">STAR rewrite</p><p className="whitespace-pre-wrap text-sm text-white/75">{feedback.improvedAnswer}</p></div>}
+                  {feedback.nextSteps?.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-white/50">{feedback.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ul>}
 
                 </motion.div>)}
             </AnimatePresence>

@@ -7,6 +7,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=install --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node services/interview ./services/interview
+COPY --chown=node:node services/progress/models/userProgress.model.js ./services/progress/models/userProgress.model.js
 COPY --chown=node:node services/auth/model/user.model.js ./services/auth/model/user.model.js
 COPY --chown=node:node services/billing/models/creditLedger.model.js ./services/billing/models/creditLedger.model.js
 COPY --chown=node:node shared ./shared

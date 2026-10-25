@@ -3,6 +3,7 @@ export const COIN_COSTS = Object.freeze({
   "resume-builder": 10,
   "roadmap-builder": 20,
   "start-interview": 50,
+  "behavioral-session": 1,
   "interview-feedback": 5,
   "download-pdf": 10,
   "code-review": 5,

@@ -51,6 +51,7 @@ function InterviewPage({user}) {
         currentQuestion: interview.currentQuestion,
         totalQuestions: interview.questions.length,
         question: interview.questions[interview.currentQuestion],
+        type: interview.type,
     }} user={user}    />
   )
 }

@@ -1,6 +1,6 @@
 const summaryPrompt = ({ role, type, questions }) => `
 
-You are an expert technical interviewer and hiring manager.
+You are an expert interviewer and hiring manager.
 
 Analyze the complete interview.
 
@@ -27,6 +27,8 @@ Use all feedback and answers.
 Do not invent information.
 
 Overall score should be between 0-100.
+
+If Interview Type is behavioral, base the report on STAR completeness, evidence, clarity, and fit. Call out missing results/outcomes when answers are short.
 
 Strengths should contain 3-5 points.
 
