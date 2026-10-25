@@ -1,5 +1,6 @@
 import { dependencyHealth } from "../../shared/utils/health.js"
 import { requestLogger } from "../../shared/middleware/requestLogger.js"
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import express from "express"
 import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
@@ -9,6 +10,7 @@ dotenv.config()
 
 const app = express()
 app.use(requestLogger("roadmap"))
+installPrometheusMetrics(app, "roadmap");
 app.use(express.json())
 app.use(cookieParser())
 

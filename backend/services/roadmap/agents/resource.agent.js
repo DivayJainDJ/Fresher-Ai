@@ -24,7 +24,7 @@ For every module title below, return the best official documentation URL.
 Return ONLY valid JSON array. No explanation. No markdown.
 Format: [{"title":"","article":""}]`),
                     new HumanMessage(`Modules:\n${titles}`)
-                ]);
+                ], 3, { feature: "roadmap-resource-links" });
 
                 const docs = JSON.parse(cleanJson(docsResponse.content));
                 docs.forEach(item => {

@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: fresherai-auth
+    static_configs: [{ targets: ["auth:8001"] }]
+  - job_name: fresherai-billing
+    static_configs: [{ targets: ["billing:6005"] }]
+  - job_name: fresherai-career
+    static_configs: [{ targets: ["career:6008"] }]
+  - job_name: fresherai-interview
+    static_configs: [{ targets: ["interview:6003"] }]
+  - job_name: fresherai-practice
+    static_configs: [{ targets: ["practice:6007"] }]
+  - job_name: fresherai-progress
+    static_configs: [{ targets: ["progress:6006"] }]
+  - job_name: fresherai-resume
+    static_configs: [{ targets: ["resume:6002"] }]
+  - job_name: fresherai-roadmap
+    static_configs: [{ targets: ["roadmap:6004"] }]

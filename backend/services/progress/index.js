@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { connectDB } from "./config/db.js";
 import { dependencyHealth } from "../../shared/utils/health.js";
 import { requestLogger } from "../../shared/middleware/requestLogger.js";
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import progressRouter from "./routes/progress.route.js";
 import { startProgressWorker, stopProgressWorker } from "./services/worker.js";
 
@@ -14,6 +15,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(requestLogger("progress"));
+installPrometheusMetrics(app, "progress");
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.get("/health", (_req, res) => dependencyHealth("progress", res));

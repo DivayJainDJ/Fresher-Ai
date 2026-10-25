@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getCoinCost } from "./coinCosts.js";
 import { ensureOpeningLedger } from "./ensureOpeningLedger.js";
+import { recordCoinRefund, recordCoinSpend } from "../observability/prometheus.js";
 
 export const spendCoinsWithLedger = async ({ User, Ledger, userId, action, session, eventKey, sessionFactory = () => User.startSession() }) => {
   const cost = getCoinCost(action);
@@ -24,9 +25,18 @@ export const spendCoinsWithLedger = async ({ User, Ledger, userId, action, sessi
     await Ledger.create([{ userId, amount: -cost, type: "spend", action, eventKey: ledgerKey }], transactionSession ? { session: transactionSession } : {});
     return { ...(typeof updated.toObject === "function" ? updated.toObject() : updated), interviewCoin: updated.interviewCoin, ledgerEventKey: ledgerKey };
   };
-  if (session) return doSpend(session);
+  if (session) {
+    const result = await doSpend(session);
+    if (result && !result.alreadyProcessed) recordCoinSpend(action, cost);
+    return result;
+  }
   const dbSession = await sessionFactory();
-  try { let result; await dbSession.withTransaction(async () => { result = await doSpend(dbSession); }); return result; }
+  try {
+    let result;
+    await dbSession.withTransaction(async () => { result = await doSpend(dbSession); });
+    if (result && !result.alreadyProcessed) recordCoinSpend(action, cost);
+    return result;
+  }
   finally { await dbSession.endSession(); }
 };
 
@@ -50,9 +60,18 @@ export const refundCoinsWithLedger = async ({ User, Ledger, userId, action, sess
     await Ledger.create([{ userId, amount: cost, type: "refund", action, eventKey: ledgerKey }], transactionSession ? { session: transactionSession } : {});
     return updated;
   };
-  if (session) return doRefund(session);
+  if (session) {
+    const result = await doRefund(session);
+    if (result) recordCoinRefund(action, cost);
+    return result;
+  }
   const dbSession = await sessionFactory();
-  try { let result; await dbSession.withTransaction(async () => { result = await doRefund(dbSession); }); return result; }
+  try {
+    let result;
+    await dbSession.withTransaction(async () => { result = await doRefund(dbSession); });
+    if (result) recordCoinRefund(action, cost);
+    return result;
+  }
   finally { await dbSession.endSession(); }
 };
 

@@ -1,0 +1,32 @@
+{
+  "annotations": { "list": [] },
+  "description": "FresherAI service, LLM, queue and cost metrics.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    { "id": 1, "title": "HTTP request rate", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }, "targets": [{ "expr": "sum by (service) (rate(fresherai_http_requests_total[5m]))", "legendFormat": "{{service}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 2, "title": "HTTP latency p95", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }, "targets": [{ "expr": "histogram_quantile(0.95, sum by (le, service) (rate(fresherai_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service}} p95", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 3, "title": "HTTP errors by status", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }, "targets": [{ "expr": "sum by (service, status_code) (rate(fresherai_http_errors_total[5m]))", "legendFormat": "{{service}} {{status_code}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 4, "title": "LLM provider outcomes and failovers", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }, "targets": [{ "expr": "sum by (provider, outcome) (rate(fresherai_llm_calls_total[5m]))", "legendFormat": "{{provider}} {{outcome}}", "refId": "A" }, { "expr": "sum(rate(fresherai_llm_retries_total[5m]))", "legendFormat": "retries", "refId": "B" }, { "expr": "sum(rate(fresherai_circuit_breaker_opens_total[5m]))", "legendFormat": "breaker opens", "refId": "C" }], "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 5, "title": "LLM cache hit ratio", "type": "timeseries", "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 }, "targets": [{ "expr": "sum(rate(fresherai_llm_cache_operations_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(fresherai_llm_cache_operations_total[5m])), 1e-9)", "legendFormat": "hit ratio", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } } },
+    { "id": 6, "title": "Token throughput by feature", "type": "timeseries", "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 }, "targets": [{ "expr": "sum by (feature, direction) (rate(fresherai_llm_tokens_total[5m]))", "legendFormat": "{{feature}} {{direction}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 7, "title": "Estimated LLM cost (process lifetime)", "type": "timeseries", "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 }, "targets": [{ "expr": "sum by (model, feature) (fresherai_llm_estimated_cost_usd_total{pricing_configured=\"true\"})", "legendFormat": "{{model}} · {{feature}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 8, "title": "Background queue depth", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }, "targets": [{ "expr": "sum by (service, queue) (fresherai_job_queue_depth)", "legendFormat": "{{service}} {{queue}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 9, "title": "Job outcomes", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }, "targets": [{ "expr": "sum by (queue, outcome) (rate(fresherai_job_outcomes_total[5m]))", "legendFormat": "{{queue}} {{outcome}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 10, "title": "Coins spent by feature", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 }, "targets": [{ "expr": "sum by (feature) (rate(fresherai_coins_spent_total[5m]))", "legendFormat": "{{feature}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } },
+    { "id": 11, "title": "Event bus lag p95", "type": "timeseries", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 }, "targets": [{ "expr": "histogram_quantile(0.95, sum by (le, consumer_group, event_type) (rate(fresherai_event_bus_lag_seconds_bucket[5m])))", "legendFormat": "{{consumer_group}} {{event_type}}", "refId": "A" }], "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }, "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } } }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": ["fresherai", "observability"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "FresherAI Overview",
+  "uid": "fresherai-overview",
+  "version": 1
+}

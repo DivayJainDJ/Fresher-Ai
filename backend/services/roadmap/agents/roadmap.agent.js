@@ -19,7 +19,7 @@ const roadmapAgent = async (state) => {
     const response = await invokeWithRetry(llm, [
         new SystemMessage(roadmapPrompt),
         new HumanMessage(`Target Role: ${state.role}\nTarget Package: ${state.targetPackage}\nResume: ${JSON.stringify(resume)}`)
-    ]);
+    ], 3, { feature: "roadmap-generation" });
 
     const roadmap = JSON.parse(cleanJson(response.content));
 

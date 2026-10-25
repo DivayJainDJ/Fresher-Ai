@@ -5,11 +5,13 @@ import cookieParser from "cookie-parser";
 import { connectDB } from "./config/db.js";
 import { dependencyHealth } from "../../shared/utils/health.js";
 import { requestLogger } from "../../shared/middleware/requestLogger.js";
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import careerRouter from "./routes/career.route.js";
 
 const app = express();
 app.use((req, res, next) => { req.requestId = req.headers["x-request-id"]; next(); });
 app.use(requestLogger("career"));
+installPrometheusMetrics(app, "career");
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
 app.get("/health", (_req, res) => dependencyHealth("career", res));

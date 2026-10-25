@@ -56,7 +56,7 @@ export const feedbackMessages = (data) => data.type?.toLowerCase() === "behavior
     : feedbackPrompt(data);
 
 export const feedbackAgent = async (data) => {
-    const response = await invokeWithRetry(llm, feedbackMessages(data), 3, { skipCache: true });
+    const response = await invokeWithRetry(llm, feedbackMessages(data), 3, { skipCache: true, feature: data.type?.toLowerCase() === "behavioral" ? "behavioral-feedback" : "interview-feedback" });
     return parseFeedback(data, response.content);
 };
 
@@ -96,6 +96,7 @@ export const streamFeedbackAgent = async (data, onToken, { signal } = {}) => {
         return true;
     }, {
         signal,
+        feature: data.type?.toLowerCase() === "behavioral" ? "behavioral-feedback" : "interview-feedback",
         validateContent: (content) => parseFeedback(data, content),
     });
     const feedback = parseFeedback(data, response.content);

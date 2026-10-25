@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { isBreakerOpen, recordBreakerFailure, resetBreaker, resetCircuit } from "./circuitBreaker.js";
 import { incrementLlmMetric, readLlmMetrics, recordFailoverLatency, recordProviderLatency } from "./llmMetrics.js";
+import { recordCacheOperation, recordCircuitBreakerOpen, recordLlmCall, recordLlmRetry } from "../observability/prometheus.js";
 export { resetCircuit } from "./circuitBreaker.js";
 
 export { cleanJson } from "./json.js";
@@ -107,7 +108,7 @@ async function openAICompatCall({ baseURL, apiKey, model, messages, maxTokens, t
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error("Empty response from provider");
-    return content;
+    return { content, usage: data.usage };
 }
 
 async function* streamOpenAICompatCall({ baseURL, apiKey, model, messages, maxTokens, temperature, signal }) {
@@ -116,7 +117,7 @@ async function* streamOpenAICompatCall({ baseURL, apiKey, model, messages, maxTo
     const res = await fetch(`${baseURL}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, Accept: "text/event-stream" },
-        body: JSON.stringify({ model, messages: toPlainMessages(messages), max_tokens: maxTokens || 3000, temperature: typeof temperature === "number" ? temperature : 0.2, stream: true }),
+        body: JSON.stringify({ model, messages: toPlainMessages(messages), max_tokens: maxTokens || 3000, temperature: typeof temperature === "number" ? temperature : 0.2, stream: true, stream_options: { include_usage: true } }),
         signal: requestSignal,
     });
     if (!res.ok) {
@@ -135,8 +136,11 @@ async function* streamOpenAICompatCall({ baseURL, apiKey, model, messages, maxTo
         const data = line.slice(5).trim();
         if (!data || data === "[DONE]") return data === "[DONE]" ? { done: true } : null;
         try {
-            const token = JSON.parse(data).choices?.[0]?.delta?.content;
-            return typeof token === "string" && token ? { content: token } : null;
+            const parsed = JSON.parse(data);
+            const token = parsed.choices?.[0]?.delta?.content;
+            if (typeof token === "string" && token) return { content: token };
+            if (parsed.usage) return { usage: parsed.usage };
+            return null;
         } catch { return null; }
     };
     while (true) {
@@ -148,18 +152,19 @@ async function* streamOpenAICompatCall({ baseURL, apiKey, model, messages, maxTo
         for (const line of lines) {
             const item = parseLine(line);
             if (item?.done) { await reader.cancel(); return; }
-            if (item?.content) yield item;
+            if (item) yield item;
         }
         if (done) break;
     }
     if (buffer) {
         const item = parseLine(buffer);
-        if (item?.content) yield item;
+        if (item) yield item;
     }
 }
 
 async function streamPrimary(provider, messages, signal, onToken) {
     let content = "";
+    let usage;
     const chunks = await provider.stream(messages, { signal });
     const iterator = chunks[Symbol.asyncIterator]();
     let removeAbortListener;
@@ -175,13 +180,14 @@ async function streamPrimary(provider, messages, signal, onToken) {
         while (true) {
             const { value: chunk, done } = await Promise.race([iterator.next(), aborted]);
             if (done) break;
+            usage = chunk?.usage_metadata || chunk?.response_metadata?.tokenUsage || chunk?.usage || usage;
             const value = chunk?.content;
             const token = typeof value === "string" ? value : Array.isArray(value) ? value.map((part) => part?.text || "").join("") : "";
             if (!token) continue;
             content += token;
             await onToken(token);
         }
-        return content;
+        return { content, usage };
     } catch (error) {
         if (signal?.aborted) void iterator.return?.();
         throw error;
@@ -194,9 +200,10 @@ function buildProviderChain(primaryLlm, defaults) {
     const chain = [
         {
             name: "groq",
+            model: process.env.GROQ_MODEL || primaryLlm?.model || "qwen/qwen3.8-27b",
             call: async (messages, signal) => {
                 const response = await primaryLlm.invoke(messages, { signal });
-                return response.content;
+                return { content: response.content, usage: response.usage_metadata || response.response_metadata?.tokenUsage };
             },
         },
     ];
@@ -205,11 +212,12 @@ function buildProviderChain(primaryLlm, defaults) {
     if (process.env.GEMINI_API_KEY) {
         chain.push({
             name: "gemini",
+            model: process.env.GEMINI_MODEL || "gemini-3.7-flash",
             call: (messages, signal) =>
                 openAICompatCall({
                     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
                     apiKey: process.env.GEMINI_API_KEY,
-                    model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+                    model: process.env.GEMINI_MODEL || "gemini-3.7-flash",
                     messages: toPlainMessages(messages),
                     maxTokens: defaults.maxTokens,
                     temperature: defaults.temperature,
@@ -222,6 +230,7 @@ function buildProviderChain(primaryLlm, defaults) {
     if (process.env.CEREBRAS_API_KEY) {
         chain.push({
             name: "cerebras",
+            model: process.env.CEREBRAS_MODEL || "llama-3.3-70b",
             call: (messages, signal) =>
                 openAICompatCall({
                     baseURL: "https://api.cerebras.ai/v1",
@@ -278,7 +287,7 @@ function retryDelayMs(error, attempt) {
 const defaultCache = { get: getCached, set: setCached };
 const defaultMetrics = { increment: incrementLlmMetric, providerLatency: recordProviderLatency, failoverLatency: recordFailoverLatency };
 
-export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCache = false, providers, cache = defaultCache, metricsSink = defaultMetrics, signal } = {}) {
+export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCache = false, providers, cache = defaultCache, metricsSink = defaultMetrics, signal, feature = "unspecified" } = {}) {
     if (signal?.aborted) throw signal.reason || new Error("LLM request aborted");
     const cacheKey = hashMessages(messages);
     const cached = skipCache ? null : await cache.get(cacheKey);
@@ -286,14 +295,16 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCach
     if (cached) {
         metrics.cacheHits += 1;
         await metricsSink.increment("cacheHits");
+        recordCacheOperation("hit", feature);
         return { content: cached };
     }
-    if (!skipCache) { metrics.cacheMisses += 1; await metricsSink.increment("cacheMisses"); }
+    if (!skipCache) { metrics.cacheMisses += 1; await metricsSink.increment("cacheMisses"); recordCacheOperation("miss", feature); }
 
     const chain = providers || buildProviderChain(llm, {
         maxTokens: llm?.maxTokens,
         temperature: llm?.temperature,
     });
+    const inputChars = toPlainMessages(messages).reduce((total, message) => total + message.content.length, 0);
 
     let lastError;
 
@@ -311,7 +322,10 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCach
             try {
                 const startedAt = Date.now();
                 if (signal?.aborted) throw signal.reason || new Error("LLM request aborted");
-                const content = await provider.call(messages, signal);
+                const response = await provider.call(messages, signal);
+                const content = typeof response === "string" ? response : response?.content;
+                const usage = typeof response === "object" ? response.usage : null;
+                recordLlmCall({ provider: provider.name, model: provider.model || provider.name, outcome: "success", feature, usage, inputChars, outputChars: typeof content === "string" ? content.length : 0 });
                 const latency = metrics.providerLatencyMs[provider.name] || { count: 0, totalMs: 0, maxMs: 0 };
                 latency.count += 1;
                 latency.totalMs += Date.now() - startedAt;
@@ -342,6 +356,7 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCach
                 if (retryable && attempt < maxAttempts) {
                     metrics.retries += 1;
                     await metricsSink.increment("retries");
+                    recordLlmRetry(feature);
                     const waitMs = retryDelayMs(error, attempt);
                     console.warn(
                         `[LLM:${provider.name}] attempt ${attempt}/${maxAttempts} failed ` +
@@ -359,7 +374,8 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCach
                     continue;
                 }
 
-                if (recordBreakerFailure(provider.name)) { metrics.breakerOpens += 1; await metricsSink.increment("breakerOpens"); }
+                if (recordBreakerFailure(provider.name)) { metrics.breakerOpens += 1; await metricsSink.increment("breakerOpens"); recordCircuitBreakerOpen(provider.name); }
+                recordLlmCall({ provider: provider.name, model: provider.model || provider.name, outcome: "error", feature, inputChars });
                 console.warn(
                     `[LLM:${provider.name}] giving up after ${attempt} attempt(s): ${error.message}`
                 );
@@ -373,7 +389,7 @@ export async function invokeWithRetry(llm, messages, maxAttempts = 3, { skipCach
 
 
 /** Stream a response with the same shared cache, provider chain, metrics, and circuit breakers. */
-export async function streamWithRetry(llm, messages, onToken, { signal, providers, cache = defaultCache, metricsSink = defaultMetrics, maxAttempts = 3, validateContent } = {}) {
+export async function streamWithRetry(llm, messages, onToken, { signal, providers, cache = defaultCache, metricsSink = defaultMetrics, maxAttempts = 3, validateContent, feature = "unspecified" } = {}) {
     if (signal?.aborted) throw signal.reason || new Error("Streaming request aborted");
     const cacheKey = hashMessages(messages);
     const cached = await cache.get(cacheKey);
@@ -381,17 +397,20 @@ export async function streamWithRetry(llm, messages, onToken, { signal, provider
     if (cached) {
         metrics.cacheHits += 1;
         await metricsSink.increment("cacheHits");
+        recordCacheOperation("hit", feature);
         await onToken(cached);
         return { content: cached, cached: true };
     }
     metrics.cacheMisses += 1;
     await metricsSink.increment("cacheMisses");
+    recordCacheOperation("miss", feature);
 
     const defaults = { maxTokens: llm?.maxTokens, temperature: llm?.temperature };
+    const inputChars = toPlainMessages(messages).reduce((total, message) => total + message.content.length, 0);
     const chain = providers || [
-        { name: "groq", stream: (input, config) => llm.stream(input, config) },
-        ...(process.env.GEMINI_API_KEY ? [{ name: "gemini", stream: (input, config) => streamOpenAICompatCall({ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.0-flash", messages: input, maxTokens: defaults.maxTokens, temperature: defaults.temperature, signal: config.signal }) }] : []),
-        ...(process.env.CEREBRAS_API_KEY ? [{ name: "cerebras", stream: (input, config) => streamOpenAICompatCall({ baseURL: "https://api.cerebras.ai/v1", apiKey: process.env.CEREBRAS_API_KEY, model: process.env.CEREBRAS_MODEL || "llama-3.3-70b", messages: input, maxTokens: defaults.maxTokens, temperature: defaults.temperature, signal: config.signal }) }] : []),
+        { name: "groq", model: process.env.GROQ_MODEL || llm?.model || "qwen/qwen3.8-27b", stream: (input, config) => llm.stream(input, config) },
+        ...(process.env.GEMINI_API_KEY ? [{ name: "gemini", model: process.env.GEMINI_MODEL || "gemini-3.7-flash", stream: (input, config) => streamOpenAICompatCall({ baseURL: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-3.7-flash", messages: input, maxTokens: defaults.maxTokens, temperature: defaults.temperature, signal: config.signal }) }] : []),
+        ...(process.env.CEREBRAS_API_KEY ? [{ name: "cerebras", model: process.env.CEREBRAS_MODEL || "llama-3.3-70b", stream: (input, config) => streamOpenAICompatCall({ baseURL: "https://api.cerebras.ai/v1", apiKey: process.env.CEREBRAS_API_KEY, model: process.env.CEREBRAS_MODEL || "llama-3.3-70b", messages: input, maxTokens: defaults.maxTokens, temperature: defaults.temperature, signal: config.signal }) }] : []),
     ];
 
     let hasEmittedToken = false;
@@ -406,17 +425,21 @@ export async function streamWithRetry(llm, messages, onToken, { signal, provider
         }
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             let providerEmitted = false;
+            let providerOutputChars = 0;
             const startedAt = Date.now();
             try {
-                const content = await streamPrimary(provider, messages, signal, async (token) => {
+                const response = await streamPrimary(provider, messages, signal, async (token) => {
+                    providerOutputChars += token.length;
                     const visible = await onToken(token);
                     if (visible !== false) {
                         providerEmitted = true;
                         hasEmittedToken = true;
                     }
                 });
+                const content = response.content;
                 if (!content) throw new Error("Empty response from provider");
                 await validateContent?.(content);
+                recordLlmCall({ provider: provider.name, model: provider.model || provider.name, outcome: "success", feature, usage: response.usage, inputChars, outputChars: content.length });
                 resetBreaker(provider.name);
                 metrics.providerSuccess[provider.name] = (metrics.providerSuccess[provider.name] || 0) + 1;
                 await metricsSink.increment(`providerSuccess:${provider.name}`);
@@ -445,12 +468,15 @@ export async function streamWithRetry(llm, messages, onToken, { signal, provider
                     if (recordBreakerFailure(provider.name)) {
                         metrics.breakerOpens += 1;
                         await metricsSink.increment("breakerOpens");
+                        recordCircuitBreakerOpen(provider.name);
                     }
+                    recordLlmCall({ provider: provider.name, model: provider.model || provider.name, outcome: "error", feature, inputChars, outputChars: providerOutputChars });
                     throw error;
                 }
                 if (isRetryableError(error) && attempt < maxAttempts) {
                     metrics.retries += 1;
                     await metricsSink.increment("retries");
+                    recordLlmRetry(feature);
                     const delay = retryDelayMs(error, attempt);
                     await new Promise((resolve, reject) => {
                         let timeout;
@@ -464,7 +490,9 @@ export async function streamWithRetry(llm, messages, onToken, { signal, provider
                 if (recordBreakerFailure(provider.name)) {
                     metrics.breakerOpens += 1;
                     await metricsSink.increment("breakerOpens");
+                    recordCircuitBreakerOpen(provider.name);
                 }
+                recordLlmCall({ provider: provider.name, model: provider.model || provider.name, outcome: "error", feature, inputChars, outputChars: providerOutputChars });
                 previousProviderFailed = true;
                 if (!firstFailureAt) firstFailureAt = Date.now();
                 break;

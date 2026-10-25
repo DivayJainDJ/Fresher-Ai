@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { z } from "zod";
 import redis from "../redis/redis.js";
+import { recordEventBusLag, recordJobOutcome, recordQueueDepth } from "../observability/prometheus.js";
 
 export const EVENT_STREAM = "fresherai:events";
 export const DEAD_LETTER_STREAM = "fresherai:events:dead";
@@ -78,8 +79,11 @@ export const createStreamConsumer = ({ group, consumer, handler, client = redis,
     const values = fieldsToObject(fields);
     const attempts = Number(values.attempts || 0) + 1;
     try {
-      await handler(parseStreamEntry(entry).event);
+      const event = parseStreamEntry(entry).event;
+      recordEventBusLag(group, event.type, (Date.now() - Date.parse(event.timestamp)) / 1000);
+      await handler(event);
       await client.xack(stream, group, streamId);
+      recordJobOutcome(group, "processed");
       return "processed";
     } catch (error) {
       const serializedError = String(error?.message || error).slice(0, 1000);
@@ -87,11 +91,29 @@ export const createStreamConsumer = ({ group, consumer, handler, client = redis,
       if (attempts >= maxAttempts) {
         await client.xadd(deadLetterStream, "MAXLEN", "~", maxLength, "*", ...toStreamFields(["sourceId", streamId, "event", values.event, "attempts", attempts, "error", serializedError, "failedAt", new Date().toISOString()]));
         await client.xack(stream, group, streamId);
+        recordJobOutcome(group, "dead-lettered");
         return "dead-lettered";
       }
       await client.xadd(stream, "MAXLEN", "~", maxLength, "*", ...toStreamFields(["event", values.event, "attempts", attempts, "lastError", serializedError]));
       await client.xack(stream, group, streamId);
+      recordJobOutcome(group, "retried");
       return "retried";
+    }
+  };
+
+  const refreshQueueDepth = async () => {
+    try {
+      const groups = await client.xinfo("GROUPS", stream);
+      const groupValues = (groups || []).map((fields) => fieldsToObject(fields));
+      const groupInfo = groupValues.find((item) => item.name === group);
+      const lag = Number(groupInfo?.lag) || 0;
+      const pending = Number(groupInfo?.pending) || 0;
+      recordQueueDepth(group, stream, lag + pending);
+    } catch {
+      try {
+        const pending = await client.xpending(stream, group);
+        recordQueueDepth(group, stream, Number(pending?.[0]) || 0);
+      } catch { /* Queue depth is best-effort instrumentation. */ }
     }
   };
 
@@ -99,17 +121,19 @@ export const createStreamConsumer = ({ group, consumer, handler, client = redis,
     processEntry,
     async readOnce({ count = 10, block = blockMs } = {}) {
       const entries = await client.xreadgroup("GROUP", group, consumer, "COUNT", count, "BLOCK", block, "STREAMS", stream, ">");
-      if (!entries) return 0;
+      if (!entries) { await refreshQueueDepth(); return 0; }
       let handled = 0;
       for (const [, messages] of entries) for (const entry of messages) { await processEntry(entry); handled += 1; }
+      await refreshQueueDepth();
       return handled;
     },
     async claimPending({ minIdleMs = 30_000, count = 10 } = {}) {
       const pending = await client.xpending(stream, group, "-", "+", count);
       const ids = (pending || []).filter((item) => Number(item[2]) >= minIdleMs).map((item) => item[0]);
-      if (!ids.length) return 0;
+      if (!ids.length) { await refreshQueueDepth(); return 0; }
       const claimed = await client.xclaim(stream, group, consumer, minIdleMs, ...ids);
       for (const entry of claimed || []) await processEntry(entry);
+      await refreshQueueDepth();
       return claimed?.length || 0;
     },
   };

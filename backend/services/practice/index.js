@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { connectDB } from "./config/db.js";
 import { dependencyHealth } from "../../shared/utils/health.js";
 import { requestLogger } from "../../shared/middleware/requestLogger.js";
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import practiceRouter from "./routes/practice.route.js";
 import Question from "./models/Question.js";
 import QuizAttempt from "./models/QuizAttempt.js";
@@ -24,6 +25,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(requestLogger("practice"));
+installPrometheusMetrics(app, "practice");
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.get("/health", (_req, res) => dependencyHealth("practice", res));

@@ -1,5 +1,6 @@
 import { dependencyHealth } from "../../shared/utils/health.js"
 import { requestLogger } from "../../shared/middleware/requestLogger.js"
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import express from "express"
 import dotenv from "dotenv"
 import cors from "cors"
@@ -11,6 +12,7 @@ dotenv.config()
 
 const app = express()
 app.use(requestLogger("resume"))
+installPrometheusMetrics(app, "resume");
 
 app.use(express.json())
 

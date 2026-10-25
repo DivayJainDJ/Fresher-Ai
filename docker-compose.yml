@@ -222,5 +222,55 @@ services:
       gateway: { condition: service_healthy }
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      auth: { condition: service_started }
+      billing: { condition: service_started }
+      career: { condition: service_started }
+      interview: { condition: service_started }
+      practice: { condition: service_started }
+      progress: { condition: service_started }
+      resume: { condition: service_started }
+      roadmap: { condition: service_started }
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus: { condition: service_started }
+    restart: unless-stopped
+
+  k6:
+    image: grafana/k6:latest
+    profiles: [observability]
+    command: run /scripts/metrics-smoke.js
+    volumes:
+      - ./ops/k6:/scripts:ro
+    depends_on:
+      resume: { condition: service_healthy }
+
 volumes:
   mongo-data:
+  prometheus-data:
+  grafana-data:

@@ -21,7 +21,7 @@ export const resumeAgent = async (resumeText, { skipCache = false, promptVersion
             targetRole ? wrapUntrustedText("target_role", targetRole) : "No target role was supplied.",
             wrapUntrustedText("resume_text", resumeText),
         ].join("\n")),
-    ], 3, { skipCache })
+    ], 3, { skipCache, feature: "resume-scoring" })
 
     const cleaned = cleanJson(response.content)
     const parsed = resumeSchema.parse(JSON.parse(cleaned))

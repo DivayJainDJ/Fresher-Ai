@@ -1,5 +1,6 @@
 import { dependencyHealth } from "../../shared/utils/health.js"
 import { requestLogger } from "../../shared/middleware/requestLogger.js"
+import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import express from "express"
 import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
@@ -10,6 +11,7 @@ dotenv.config()
 
 const app = express()
 app.use(requestLogger("billing"))
+installPrometheusMetrics(app, "billing");
 app.use(express.json({ verify: (req, _res, buffer) => { if (req.originalUrl.startsWith("/webhook")) req.rawBody = Buffer.from(buffer) } }))
 app.use(cookieParser())
 

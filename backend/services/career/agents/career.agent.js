@@ -15,7 +15,7 @@ const matchSchema = z.object({
 const coverLetterSchema = z.object({ coverLetter: z.string().min(80).max(5000) }).strict();
 
 const invoke = async (system, fields, schema, { skipCache = false } = {}) => {
-  const response = await invokeWithRetry(llm, [new SystemMessage(system), new HumanMessage(fields)], 3, { skipCache });
+  const response = await invokeWithRetry(llm, [new SystemMessage(system), new HumanMessage(fields)], 3, { skipCache, feature: system.includes("cover letter") ? "cover-letter" : "career-match" });
   const parsed = schema.parse(JSON.parse(cleanJson(response.content)));
   return parsed;
 };
