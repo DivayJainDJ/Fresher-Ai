@@ -4,6 +4,8 @@ This repository deploys the nine API containers (gateway plus auth, resume, inte
 
 The workflow deploys only after the `test-and-build` job passes, only on pushes to `main`, and only when both `GCP_CLOUD_RUN_DEPLOY=true` and `GCP_BILLING_BUDGET_READY=true` are set as GitHub Actions variables. Leave those variables unset until the billing alert and the Google Cloud setup below are complete. The deployment uses GitHub OIDC Workload Identity Federation; no service-account key is stored in GitHub or the repository.
 
+Fill production values in the gitignored [`.env.production`](.env.production) file (keys are listed in [`.env.production.example`](.env.production.example)). Paste secrets into Secret Manager and non-secrets into GitHub Actions variables / Vercel. Do not put a production `.env` on Cloud Run or commit filled values.
+
 ## Current free-tier limits to plan around
 
 - Request-billed Cloud Run currently includes 2 million requests, 180,000 vCPU-seconds, and 360,000 GiB-seconds per month, aggregated across projects under a billing account. These are usage discounts, not a spending cap; storage, build, egress, scheduler, and other services can still cost money. Check [Cloud Run pricing](https://cloud.google.com/run/pricing) again before deployment.

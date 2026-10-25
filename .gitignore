@@ -1,7 +1,18 @@
+# Never commit secret env files. Commit only *.env.example templates.
 node_modules
 **/node_modules
 .env
 **/.env
+.env.local
+**/.env.local
+.env.*.local
+**/.env.*.local
+.env.production
+**/.env.production
+!.env.example
+!**/.env.example
+!.env.production.example
+!**/.env.production.example
 serviceAccountKey.json
 **/serviceAccountKey.json
 dist
@@ -14,5 +25,3 @@ eval/results/*.json
 eval/results/*.md
 !eval/results/.gitkeep
 .DS_Store
-.env
-**/.env
