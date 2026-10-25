@@ -13,6 +13,7 @@ import InterviewPage from './pages/InterviewPage'
 import InterviewReport from './pages/InterviewReport'
 import Roadmap from './pages/Roadmap'
 import Billing from './pages/Billing'
+import Practice from './pages/Practice'
 
 function App() {
   const [user,setUser]= useState(null)
@@ -105,6 +106,10 @@ function App() {
 
       <Route path='/billing' element={
       user ? <Billing user={user} setUser={setUser}/>
+      : <Navigate to="/" replace/> }/>
+
+      <Route path='/practice' element={
+      user ? <Practice user={user} setUser={setUser}/>
       : <Navigate to="/" replace/> }/>
 
 

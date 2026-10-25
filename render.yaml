@@ -32,6 +32,7 @@ services:
   - type: web
     name: interview-ai-backend-new
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/gateway/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -69,10 +70,16 @@ services:
           name: fresherai-billing
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: PRACTICE_SERVICE_URL
+        fromService:
+          name: fresherai-practice
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   - type: web
     name: fresherai-auth
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/services/auth/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -84,6 +91,7 @@ services:
   - type: web
     name: fresherai-resume
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/services/resume/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -95,6 +103,7 @@ services:
   - type: web
     name: fresherai-interview
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/services/interview/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -106,6 +115,7 @@ services:
   - type: web
     name: fresherai-roadmap
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/services/roadmap/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
@@ -131,10 +141,25 @@ services:
   - type: web
     name: fresherai-billing
     runtime: docker
+    plan: free
     dockerfilePath: ./backend/services/billing/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - fromGroup: fresherai-backend
+
+  - type: web
+    name: fresherai-practice
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/services/practice/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "6007"
       - fromGroup: fresherai-backend

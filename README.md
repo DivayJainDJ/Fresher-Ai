@@ -11,6 +11,7 @@ FresherAI helps fresh graduates prepare for tech interviews with:
 - **Resume Scoring** — AI analyzes your resume and provides a score with improvement suggestions
 - **Mock Interviews** — LLM-powered interview sessions with dynamic question generation
 - **Learning Roadmaps** — Personalized skill development paths based on your goals
+- **Practice Quizzes** — Timed aptitude and CS fundamentals quizzes from a bundled, approved question bank
 - **Credit System** — Pay-per-use billing with Razorpay integration
 
 ---
@@ -22,8 +23,8 @@ React + Vite frontend
         ↓
 Express API gateway ───── Redis (sessions, limits, cache, resume jobs, event stream)
         ↓
-┌───────┼────────┬───────────┬─────────┬──────────┐
-Auth  Resume  Interview   Roadmap   Billing   Progress
+┌───────┼────────┬───────────┬─────────┬──────────┬──────────┐
+Auth  Resume  Interview   Roadmap   Billing   Progress   Practice
         └──────────┴───────────┴───────────┘
               MongoDB
         AI services → Groq
@@ -40,6 +41,7 @@ Auth  Resume  Interview   Roadmap   Billing   Progress
 | Roadmap | 6004 | Personalized learning paths |
 | Billing | 6005 | Credit system, Razorpay |
 | Progress | 6006 | Redis Stream event consumer, progress and streak aggregates |
+| Practice | 6007 | Timed, database-backed quizzes; no quiz-time LLM calls |
 | Frontend | 5173 | React + Vite client |
 
 ---
@@ -74,6 +76,7 @@ Fresher-Ai/
 │       ├── interview/      # Mock interview sessions
 │       ├── roadmap/        # Learning roadmap generation
 │       ├── progress/       # User activity aggregates and event lag
+│       ├── practice/       # Approved aptitude and CS fundamentals questions
 │       └── billing/        # Credits & Razorpay
 ```
 
@@ -88,6 +91,8 @@ Fresher-Ai/
 - Redis
 - Firebase project
 - API keys: Groq, Razorpay
+
+Practice quizzes run without LLM keys. To draft extra questions manually, set `GROQ_API_KEY` and run `node scripts/generate-questions.js <topic> [count]`; generated questions stay in draft status until explicitly approved. Approve selected IDs with `node scripts/approve-questions.js <id...>` or approve all drafts with `--all`.
 
 ### Installation
 
