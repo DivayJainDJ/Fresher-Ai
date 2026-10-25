@@ -34,6 +34,19 @@ export const startProgressWorker = async () => {
   poll();
 };
 
+// Cloud Scheduler invokes this endpoint periodically so Redis Stream events
+// continue to drain even when Cloud Run has scaled the background poller to 0.
+export const drainProgressBacklog = async ({ maxBatches = 20 } = {}) => {
+  let processed = 0;
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const pending = await consumer.claimPending({ count: 25 });
+    const fresh = await consumer.readOnce({ count: 25, block: 100 });
+    processed += pending + fresh;
+    if (pending + fresh === 0) break;
+  }
+  return processed;
+};
+
 export const stopProgressWorker = async () => {
   running = false;
   if (timer) clearImmediate(timer);

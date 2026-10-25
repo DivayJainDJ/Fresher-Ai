@@ -61,6 +61,19 @@ export const startInterviewEventWorker = async () => {
   poll();
 };
 
+// Scheduler-triggered drain keeps this consumer useful when its Cloud Run
+// instance is otherwise allowed to scale to zero.
+export const drainRoadmapBacklog = async ({ maxBatches = 20 } = {}) => {
+  let processed = 0;
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const pending = await consumer.claimPending({ count: 25 });
+    const fresh = await consumer.readOnce({ count: 25, block: 100 });
+    processed += pending + fresh;
+    if (pending + fresh === 0) break;
+  }
+  return processed;
+};
+
 export const stopInterviewEventWorker = async () => {
   running = false;
   if (timer) clearImmediate(timer);

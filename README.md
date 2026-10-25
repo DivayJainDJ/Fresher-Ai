@@ -21,7 +21,7 @@ FresherAI helps fresh graduates prepare for tech interviews with:
 ## Architecture
 
 ```
-React + Vite frontend
+React + Vite frontend (Vercel)
         ↓
 Express API gateway ───── Redis (sessions, limits, cache, resume jobs, event stream)
         ↓
@@ -44,6 +44,7 @@ Auth  Resume  Interview   Roadmap   Billing   Progress   Practice
 | Billing | 6005 | Credit system, Razorpay |
 | Progress | 6006 | Redis Stream event consumer, progress and streak aggregates |
 | Practice | 6007 | Timed quizzes, SQL and coding problem banks, and practice attempt recording |
+| Career | 6008 | Job matching, cover letters, application tracker, and due-date reminders |
 | Frontend | 5173 | React + Vite client |
 
 ---
@@ -79,6 +80,7 @@ Fresher-Ai/
 │       ├── roadmap/        # Learning roadmap generation
 │       ├── progress/       # User activity aggregates and event lag
 │       ├── practice/       # Approved aptitude and CS fundamentals questions
+│       ├── career/         # Job matching and application tracking
 │       └── billing/        # Credits & Razorpay
 ```
 
@@ -144,7 +146,7 @@ The command prints average, p50, p95, and maximum publish-to-process lag, then r
 
 ### Deployment settings
 
-Set `GROQ_MODEL` once in the shared Render environment group. The current model, `qwen/qwen3.8-27b`, is listed in Groq's [official model catalog](https://console.groq.com/docs/models) as a Preview model and has token pricing; check your Groq account's current quota and billing before enabling it. The Render blueprint asks for `FRONTEND_URL`; enter the exact comma-separated origins you control. Do not enter broad preview host patterns.
+The optional Cloud Run deployment uses GitHub Actions Workload Identity Federation; it stores no service-account key. Follow [ops/cloudrun/README.md](ops/cloudrun/README.md) to set the billing alert, GCP resources, Secret Manager values, and GitHub Actions variables. Until that setup is complete, the deploy job stays skipped and the local Compose stack remains available. After a deployment, configure Vercel `VITE_BACKEND_URL` to the gateway URL and set `FRONTEND_URL` to the exact Vercel origin. Cloud Run minimum instances are 0, so expect a short cold start after idle.
 
 Configure Razorpay's `payment.captured` webhook at `https://<gateway-host>/api/billing/webhook` and set the matching signing secret as `RAZORPAY_WEBHOOK_SECRET`.
 
@@ -158,7 +160,7 @@ The gateway supports both the existing Redis fixed-window limiter and an atomic 
 
 | Check | Result |
 |---|---:|
-| Node test cases | 16 passed |
+| Node test cases | 23 passed |
 | Frontend production build | Passed |
 | Backend image builds | Configured in CI; not run locally |
 | Live deployment/demo | Not configured in this change |

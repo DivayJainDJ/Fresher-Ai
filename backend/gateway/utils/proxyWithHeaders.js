@@ -2,6 +2,25 @@ import { createProxyMiddleware, fixRequestBody } from "http-proxy-middleware";
 import { normalizeServiceUrl } from "./normalizeServiceUrl.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const cloudRunTokens = new Map();
+
+const getCloudRunIdToken = async (audience) => {
+    const cached = cloudRunTokens.get(audience);
+    if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+
+    const metadataUrl = new URL("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity");
+    metadataUrl.searchParams.set("audience", audience);
+    metadataUrl.searchParams.set("format", "full");
+    const response = await fetch(metadataUrl, {
+        headers: { "Metadata-Flavor": "Google" },
+        signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Cloud Run identity token request failed (${response.status})`);
+    const token = (await response.text()).trim();
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+    cloudRunTokens.set(audience, { token, expiresAt: Number(payload.exp) * 1000 });
+    return token;
+};
 
 export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false, rawBody = false, sse = false, timeoutMs = 180_000 } = {}) => {
     const target = normalizeServiceUrl(serviceUrl);
@@ -12,7 +31,7 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
 
     const routeRegex = new RegExp(`^${escapeRegex(routePrefix)}`);
 
-    return createProxyMiddleware({
+    const proxy = createProxyMiddleware({
         target,
         changeOrigin: true,
         proxyTimeout: sse ? timeoutMs : 180_000,
@@ -24,6 +43,7 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
         },
         on: {
             proxyReq: (proxyReq, req) => {
+                if (req.cloudRunAuthorization) proxyReq.setHeader("authorization", req.cloudRunAuthorization);
                 if (sse) {
                     proxyReq.setHeader("accept-encoding", "identity");
                     proxyReq.setHeader("accept", "text/event-stream");
@@ -90,4 +110,19 @@ export const proxyWithHeaders = (serviceUrl, routePrefix, { preserveBody = false
             },
         },
     });
+
+    return (req, res, next) => {
+        // Local Compose and Render targets do not use Cloud Run IAM. Cloud Run
+        // services stay private and receive a short-lived audience-bound token.
+        if (process.env.K_SERVICE && target.startsWith("https://")) {
+            getCloudRunIdToken(target)
+                .then((token) => {
+                    req.cloudRunAuthorization = `Bearer ${token}`;
+                    proxy(req, res, next);
+                })
+                .catch(next);
+            return;
+        }
+        proxy(req, res, next);
+    };
 };

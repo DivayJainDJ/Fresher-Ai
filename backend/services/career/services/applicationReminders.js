@@ -44,11 +44,15 @@ export const sendDueApplicationReminders = async ({ now = new Date() } = {}) => 
 };
 
 export const startApplicationReminderWorker = async () => {
-  await Promise.all([Application.init(), ReminderDelivery.init()]);
+  await initializeApplicationReminders();
   queue = new Queue(queueName, { connection: connection() });
   worker = new Worker(queueName, async () => sendDueApplicationReminders(), { connection: connection(), concurrency: 1 });
   worker.on("failed", (job, error) => console.error(JSON.stringify({ service: "career", event: "reminder_job_failed", jobId: job?.id, error: error.message })));
   await queue.upsertJobScheduler("daily-application-reminders", { pattern: "0 0 * * *", tz: "UTC" }, { name: "send-due-reminders", data: {}, opts: { attempts: 1, removeOnComplete: 100, removeOnFail: 100 } });
+};
+
+export const initializeApplicationReminders = async () => {
+  await Promise.all([Application.init(), ReminderDelivery.init()]);
 };
 
 export const stopApplicationReminderWorker = async () => {

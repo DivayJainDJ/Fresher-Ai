@@ -25,5 +25,49 @@ jobs:
           docker build -f backend/services/roadmap/Dockerfile backend -t fresherai-roadmap:ci
           docker build -f backend/services/progress/Dockerfile backend -t fresherai-progress:ci
           docker build -f backend/services/billing/Dockerfile backend -t fresherai-billing:ci
+          docker build -f backend/services/practice/Dockerfile backend -t fresherai-practice:ci
+          docker build -f backend/services/career/Dockerfile backend -t fresherai-career:ci
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile . -t fresherai-frontend:ci
+
+  deploy-cloud-run:
+    name: Deploy all API services to Cloud Run
+    needs: test-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.GCP_CLOUD_RUN_DEPLOY == 'true' && vars.GCP_BILLING_BUDGET_READY == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+      GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+      GCP_SCHEDULER_SERVICE_ACCOUNT: ${{ vars.GCP_SCHEDULER_SERVICE_ACCOUNT }}
+      FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+      EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER }}
+      EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+      DEPLOY_IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify deployment configuration
+        run: |
+          for key in GCP_PROJECT_ID GCP_REGION GCP_ARTIFACT_REPOSITORY GCP_RUNTIME_SERVICE_ACCOUNT GCP_SCHEDULER_SERVICE_ACCOUNT FRONTEND_URL FIREBASE_PROJECT_ID; do
+            if [[ -z "${!key}" ]]; then echo "Missing GitHub Actions variable: $key" >&2; exit 1; fi
+          done
+          if [[ -z "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}" || -z "${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}" ]]; then
+            echo "Configure the GitHub Workload Identity Federation variables first." >&2
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Artifact Registry and deploy Cloud Run services
+        run: |
+          gcloud config set project "$GCP_PROJECT_ID"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          bash ops/cloudrun/deploy.sh

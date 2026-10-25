@@ -7,7 +7,7 @@ import { dependencyHealth } from "../../shared/utils/health.js";
 import { requestLogger } from "../../shared/middleware/requestLogger.js";
 import { installPrometheusMetrics } from "../../shared/observability/prometheus.js";
 import progressRouter from "./routes/progress.route.js";
-import { startProgressWorker, stopProgressWorker } from "./services/worker.js";
+import { drainProgressBacklog, startProgressWorker, stopProgressWorker } from "./services/worker.js";
 
 const app = express();
 app.use((req, res, next) => {
@@ -19,6 +19,15 @@ installPrometheusMetrics(app, "progress");
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.get("/health", (_req, res) => dependencyHealth("progress", res));
+app.post("/internal/events/drain", async (_req, res) => {
+  try {
+    const processed = await drainProgressBacklog();
+    return res.json({ success: true, processed });
+  } catch (error) {
+    console.error(JSON.stringify({ service: "progress", event: "scheduled_drain_failed", error: error.message }));
+    return res.status(503).json({ success: false, message: "Could not drain event backlog" });
+  }
+});
 app.use("/", progressRouter);
 
 const start = async () => {
