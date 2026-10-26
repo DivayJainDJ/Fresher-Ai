@@ -31,11 +31,10 @@ app.use("/", interviewRouter);
 const startServer = async () => {
     try {
         await connectDB();
-        await seedBehavioralQuestions();
-
         const server = app.listen(PORT, "0.0.0.0", () => {
             console.log(`Interview-service Started on ${PORT}`);
         });
+        await seedBehavioralQuestions();
 
         // Graceful shutdown
         const shutdown = (signal) => {

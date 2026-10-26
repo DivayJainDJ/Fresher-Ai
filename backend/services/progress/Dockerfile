@@ -8,7 +8,13 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=install --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node services/progress ./services/progress
-COPY --chown=node:node services/auth/model/user.model.js ./services/auth/model/user.model.js
+COPY --chown=node:node services/auth/model ./services/auth/model
+COPY --chown=node:node services/resume/models ./services/resume/models
+COPY --chown=node:node services/interview/models ./services/interview/models
+COPY --chown=node:node services/practice/models ./services/practice/models
+COPY --chown=node:node services/roadmap/models ./services/roadmap/models
+COPY --chown=node:node services/career/models ./services/career/models
+COPY --chown=node:node services/billing/models ./services/billing/models
 COPY --chown=node:node shared ./shared
 WORKDIR /app/services/progress
 USER node

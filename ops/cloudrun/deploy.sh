@@ -15,9 +15,25 @@ set -Eeuo pipefail
 registry="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}"
 image_tag="${DEPLOY_IMAGE_TAG}"
 
+USE_CLOUD_BUILD="${USE_CLOUD_BUILD:-0}"
+
 build_push() {
   local name="$1" dockerfile="$2" context="$3"
   local image="${registry}/fresherai-${name}:${image_tag}"
+  local rel="${dockerfile#"${context}"/}"
+  if [[ "$USE_CLOUD_BUILD" == "1" ]]; then
+    echo "Cloud Build: ${image} (Dockerfile ${rel})"
+    gcloud builds submit "$context" --project "$GCP_PROJECT_ID" --timeout=1200s --quiet --config=/dev/stdin <<EOF
+steps:
+- name: gcr.io/cloud-builders/docker
+  args: ["build", "-f", "${rel}", "-t", "${image}", "."]
+images:
+- ${image}
+options:
+  logging: CLOUD_LOGGING_ONLY
+EOF
+    return
+  fi
   docker build -f "$dockerfile" "$context" -t "$image"
   docker push "$image"
 }
