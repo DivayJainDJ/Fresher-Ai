@@ -1,3 +1,4 @@
+import mongoose from "mongoose"
 import express from "express"
 import dotenv from "dotenv"
 dotenv.config()
@@ -152,6 +153,14 @@ app.use((error, req, res, _next) => {
         return res.status(500).json({ message: error.message || "Internal server error" })
     }
 })
+
+try {
+    await mongoose.connect(process.env.MONGODB_URL)
+    console.log("Gateway connected to MongoDB")
+} catch (err) {
+    console.error("Gateway failed to connect to MongoDB", err)
+    process.exit(1)
+}
 
 const server = app.listen(process.env.PORT || 8000, "0.0.0.0", () => {
     console.log(`Gateway Started on ${process.env.PORT || 8000}`)
